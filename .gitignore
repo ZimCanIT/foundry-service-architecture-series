@@ -1,0 +1,32 @@
+# Terraform working directories and local state
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+
+# Terraform plans and crash logs
+*.tfplan
+crash.log
+crash.*.log
+
+# Local variable files may contain credentials or environment-specific values
+*.tfvars
+*.tfvars.json
+!*.example.tfvars
+!*.example.tfvars.json
+
+# Local Terraform CLI configuration
+.terraformrc
+terraform.rc
+
+# Per-developer overrides
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Local environment files and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
