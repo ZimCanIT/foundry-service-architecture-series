@@ -34,3 +34,6 @@ override.tf.json
 # Local Terraform backend configuration, which can contain storage credentials
 *.tfbackend
 *.tfbackend.hcl
+
+# Local Codex instructions
+/AGENTS.md
