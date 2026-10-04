@@ -2,7 +2,7 @@
 
 This directory is the catalogue of reusable Terraform capabilities for the Microsoft Foundry series. Modules are composed by independent roots under `environments/`; they do not own state and do not call sibling modules.
 
-The directory names mark the intended capability boundaries for the whole repo. Empty directories contain only `.gitkeep` and are architecture placeholders, not implemented modules. Implement a module when its first environment or lab needs it. Series 1 uses only the modules required by `environments/series-1/basic-chat`.
+Each capability directory contains a Terraform module scaffold with `main.tf`, `variables.tf`, `outputs.tf`, and a README. These files mark the module boundary and are not implemented infrastructure yet. Series 1 uses only the modules required by `environments/series-1/basic-chat`.
 
 | Module | Capability boundary | First intended series |
 | --- | --- | --- |
@@ -29,4 +29,4 @@ The directory names mark the intended capability boundaries for the whole repo. 
 | `regional-resilience` | Multi-region workload composition and traffic distribution. | 1 |
 | `disaster-recovery` | Recovery resources and configuration for application, data, and agent dependencies. | 1 |
 
-A video does not necessarily need a new module or environment. Keep benchmarking harnesses, prompt evaluation code, application logic, and other non-infrastructure assets outside Terraform modules. Add a module only when it packages a cohesive Azure capability that is reused or has a clear owner-managed lifecycle.
+A video does not necessarily need a new module or environment. Keep benchmarking harnesses, prompt evaluation code, application logic, and other non-infrastructure assets outside Terraform modules. Add implementation to a scaffold only when it packages a cohesive Azure capability that is reused or has a clear owner-managed lifecycle.
