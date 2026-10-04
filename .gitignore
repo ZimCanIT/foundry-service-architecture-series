@@ -30,3 +30,13 @@ override.tf.json
 !.env.example
 *.pem
 *.key
+
+# Local Terraform backend configuration, which can contain storage credentials
+*.tfbackend
+*.tfbackend.hcl
+
+# Local Codex instructions
+/AGENTS.md
+
+# Local documentation content
+/docs/
