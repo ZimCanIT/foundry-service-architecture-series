@@ -37,3 +37,6 @@ override.tf.json
 
 # Local Codex instructions
 /AGENTS.md
+
+# Local documentation content
+/docs/
