@@ -2,7 +2,7 @@
 
 This directory is the catalogue of reusable Terraform capabilities for the Microsoft Foundry series. Modules are composed by independent roots under `environments/`; they do not own state and do not call sibling modules.
 
-Each capability directory contains a Terraform module scaffold with `main.tf`, `variables.tf`, `outputs.tf`, and a README. These files mark the module boundary and are not implemented infrastructure yet. Series 1 uses only the modules required by `environments/series-1/basic-chat`.
+Each capability directory contains only a `.gitkeep` marker so Git tracks the planned directory structure. No Terraform configuration is included. Series 1 uses only the directories required by `environments/series-1/basic-chat`.
 
 | Module | Capability boundary | First intended series |
 | --- | --- | --- |
