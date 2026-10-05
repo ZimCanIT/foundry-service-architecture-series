@@ -1,0 +1,16 @@
+{
+  "name": "foundry-service-architecture-series",
+  "description": "Provides Vercel agent-browser commands for browser verification of the deployed web app and Easy Auth sign-in.",
+  "private": true,
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "browser": "agent-browser",
+    "browser:install": "agent-browser install",
+    "browser:install:with-deps": "agent-browser install --with-deps"
+  },
+  "devDependencies": {
+    "agent-browser": "0.38.2"
+  }
+}
