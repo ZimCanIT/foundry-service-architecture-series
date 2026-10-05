@@ -1,13 +1,15 @@
 # Terraform Modules
 
-This directory contains only the module boundaries needed by the initial Microsoft Foundry basic chat implementation. Each directory contains a `.gitkeep` marker so Git tracks the structure; no Terraform configuration is included.
+This directory contains cohesive capabilities used by the Series 1 basic Microsoft Foundry chat environment.
 
-| Module | Basic architecture responsibility |
+| Module | Responsibility |
 | --- | --- |
-| `foundry-account` | Foundry resource, model deployment, account diagnostics, and account-level access. |
-| `foundry-project` | Foundry project and identity, including its Bing Grounding and Application Insights connections. |
-| `bing-grounding` | Bing Grounding resource used by the prompt agent. |
-| `observability` | Log Analytics workspace, Application Insights resource, and shared telemetry foundation. |
-| `chat-web-app` | App Service plan and web app, workload identity, application settings, diagnostics, and the app identity's Foundry access. |
+| `foundry` | Foundry account, optional project, optional model deployment, diagnostics, scoped provisioning roles and optional project connections. |
+| `azure-ai-search` | Azure AI Search service, diagnostics and deployment-principal access for index bootstrap. |
+| `bing-grounding` | Bing Grounding resource and sensitive key retrieval. |
+| `azure-monitor` | Log Analytics workspace and Application Insights resource. |
+| `web-app` | Reusable Linux web application configuration and diagnostics. It creates a dedicated App Service plan with the AVM by default, or accepts an existing shared plan. |
 
-Connections are kept with `foundry-project` because the basic implementation has one project and its connections are configured as part of that project. Add another module boundary only when a later implementation demonstrates a cohesive capability that needs separate ownership or reuse.
+The environment root uses the Azure Verified Module for Resource Groups. The reusable `web-app` module uses the Azure Verified Module for App Service plans. The web application itself remains a direct AzureRM resource so sensitive Easy Auth settings can be passed through a sensitive Terraform input. The current published Foundry account, Azure AI Search, Application Insights and Log Analytics AVMs constrain AzureRM to version 4.x or `< 5.0.0`, while this root uses AzureRM 5.8.0 for the Foundry project API. Those resources therefore remain on provider resources in this implementation.
+
+Foundry account and project resources share one module because the project is a child resource whose identity and connections are configured against its account. The module can also deploy only the account, add a project without a model deployment, or create the account with a model deployment and no project. Project connections are independently optional.

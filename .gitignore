@@ -1,5 +1,9 @@
 # Terraform working directories and local state
 **/.terraform/*
+node_modules/
+npm-debug.log*
+# Provider selections are committed only for the independent environment roots.
+/modules/*/.terraform.lock.hcl
 *.tfstate
 *.tfstate.*
 
@@ -30,6 +34,9 @@ override.tf.json
 !.env.example
 *.pem
 *.key
+.venv/
+__pycache__/
+*.py[cod]
 
 # Local Terraform backend configuration, which can contain storage credentials
 *.tfbackend
@@ -37,6 +44,10 @@ override.tf.json
 
 # Local Codex instructions
 /AGENTS.md
+/.codex/
 
 # Local documentation content
 /docs/
+
+# Local Node.js version preference
+/.nvmrc

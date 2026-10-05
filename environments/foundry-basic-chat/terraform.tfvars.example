@@ -1,0 +1,10 @@
+workload_name       = "zimcnait-basic-chat"
+resource_group_name = "rg-zimcnait-basic-chat-uat-sc-001"
+location            = "swedencentral"
+region_code         = "sc"
+environment         = "uat"
+instance            = "001"
+search_index_name   = "foundry-series-1"
+agent_name          = "baseline-chatbot-agent"
+agent_version       = "pending"
+tags                = {}

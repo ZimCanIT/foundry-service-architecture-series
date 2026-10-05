@@ -1,7 +1,7 @@
 # Terraform Environments
 
-Each implemented directory below this path is an independently deployable Terraform root module with its own state key, inputs, outputs, prerequisites, deployment instructions, and cleanup steps.
+Each implemented directory below this path is an independently deployable Terraform root module with its own state, inputs, outputs, prerequisites, deployment instructions, and cleanup steps.
 
-Series 1 contains exactly one environment: [basic Microsoft Foundry chat](series-1/basic-chat/README.md). The `.gitkeep` markers in later series directories reserve the series boundaries without implying that deployments have been implemented. Add a root module when a later architecture requires a distinct deployment and state boundary.
+The [Foundry basic chat](foundry-basic-chat/README.md) environment is the initial proof of concept. The `foundry-agent-service` directory is reserved for the next architecture stage and contains no deployment yet. Add a root module when that architecture is in scope and needs its own state boundary.
 
 See the [module catalogue](../modules/README.md) for the full repository design and capability boundaries.
