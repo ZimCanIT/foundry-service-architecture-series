@@ -1,70 +1,86 @@
 # Foundry Basic Chat
 
-This environment deploys the Microsoft Foundry chat proof of concept with Terraform, following the Azure Architecture Center reference and adding Azure AI Search grounding and Microsoft Entra Easy Auth.
+Deploy Foundry, GPT-4.1, Azure AI Search, Bing grounding, Azure Monitor and an App Service chat UI with Easy Auth. This public, single-region architecture is for proof of concept use.
 
-The root module composes the Foundry account and optional project, GPT-4.1 deployment, Azure AI Search, Bing grounding, monitoring and App Service. Bootstrap scripts create a synthetic Search fixture and named prompt agent after the project connections exist. The public, single-region design is for proof of concept work and is not production ready.
+## What gets created
+
+You do not need to create these workload resources manually:
+
+| Resource or configuration | Created by |
+| --- | --- |
+| Dedicated resource group | Terraform |
+| Foundry account (S0), project and GPT-4.1 model deployment (Global Standard, capacity 50) | Terraform |
+| Azure AI Search service (Basic) and Bing Grounding resource (G1) | Terraform |
+| Linux App Service plan (B1, one instance) and .NET 10 web app | Terraform |
+| Log Analytics workspace and Application Insights | Terraform |
+| Managed identities, role assignments, project connections, diagnostics and web app authentication settings | Terraform |
+| Easy Auth app registration and client secret for website sign-in | Script in step 2 |
+| Search index, sample document and versioned prompt agent | Scripts in step 4 |
+
+The chat application code is deployed separately in step 5.
 
 ## Prerequisites
 
-- Azure CLI, Terraform, TFLint, Python 3 and `curl` installed.
-- An Azure subscription with permissions to create the listed resources and role assignments. The deployment identity needs `Owner`, `Role Based Access Control Administrator` or `User Access Administrator` at the deployment scope to create role assignments.
-- An Azure CLI session for the intended tenant and subscription. Terraform uses that session for authentication and stores state locally in this directory.
-- For service-principal sign-in, set the credentials in your shell and run:
+- Use a Linux or WSL Bash terminal with Git, [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli), [Terraform](https://developer.hashicorp.com/terraform/install) 1.10+ (1.x), [TFLint](https://github.com/terraform-linters/tflint#installation), Python 3.10+ with `venv`/`pip`, `curl` and `sha256sum` installed. Clone this repository and open its root directory in the terminal.
+- Use a paid or pay-as-you-go Azure subscription eligible for [Bing Grounding](https://learn.microsoft.com/azure/foundry-classic/agents/how-to/tools-classic/bing-grounding). Check model availability and quota for the deployment above in your chosen region; the example uses Sweden Central.
+- Prepare a **deployment service principal**, an application identity used by Azure CLI and Terraform. The current code expects this identity type.
 
-  ```bash
-  az login --service-principal \
-    --username "$AZURE_CLIENT_ID" \
-    --password "$AZURE_CLIENT_SECRET" \
-    --tenant "$AZURE_TENANT_ID"
-  az account set --subscription "$AZURE_SUBSCRIPTION_ID"
-  ```
+If you do not already have a deployment identity, have an authorised administrator complete these steps:
 
-  Do not put credentials in this README, a Terraform variable file or source control. Check the selected context with `az account show` before deployment.
+1. In **Microsoft Entra ID > App registrations**, register a single-tenant application, such as `foundry-deployer`. Under **Certificates & secrets**, create a client secret and securely save its **Value**. See [Microsoft's service principal setup guide](https://learn.microsoft.com/entra/identity-platform/howto-create-service-principal-portal).
+2. In the target subscription's **Access control (IAM)**, assign that identity **Contributor** and **Role Based Access Control Administrator**. An existing **Owner** assignment also covers these deployment operations. Subscription scope is needed here because Terraform creates the resource group.
+3. On the deployment app's **API permissions**, add **Microsoft Graph > Application permissions > Application.ReadWrite.OwnedBy**. An administrator authorised to consent to Microsoft Graph application permissions, such as a **Privileged Role Administrator**, must [grant admin consent](https://learn.microsoft.com/entra/identity/enterprise-apps/grant-admin-consent). Azure subscription roles do not grant this permission.
 
-## Configure Easy Auth
+This deployment identity is separate from the Easy Auth application created in step 2 below.
 
-The web app uses Microsoft Entra authentication through App Service Easy Auth. Create its single-tenant app registration before the first Terraform apply so the web app can be configured with its client ID and secret.
+## 1. Authenticate and configure
 
-The signed-in identity needs permission to create an app registration and add a client secret. For interactive users, Microsoft documents the **Application Developer** role, subject to tenant policy. When using a service principal, grant it Microsoft Graph's **Application.ReadWrite.OwnedBy** application permission and tenant admin consent. Azure subscription `Owner` alone does not grant Microsoft Graph permissions.
-
-From the repository root, run the create-only script with the exact globally unique App Service name used by this environment:
+Find the **Application (client) ID** and **Directory (tenant) ID** on the deployment app's Overview page, and the **Subscription ID** on the subscription's Overview page. From the repository root, enter them at the prompts; the client secret input is hidden:
 
 ```bash
-bash scripts/create_easy_auth_app.sh \
-  --web-app-name app-zimcnait-basic-chat-uat-001
+cd environments/foundry-basic-chat
+umask 077
+read -r -p "Application (client) ID: " AZURE_CLIENT_ID
+read -r -p "Directory (tenant) ID: " AZURE_TENANT_ID
+read -r -p "Subscription ID: " AZURE_SUBSCRIPTION_ID
+read -r -s -p "Client secret value: " AZURE_CLIENT_SECRET
+printf '\n'
+az login --service-principal \
+  --username "$AZURE_CLIENT_ID" --password "$AZURE_CLIENT_SECRET" \
+  --tenant "$AZURE_TENANT_ID"
+az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+export ARM_SUBSCRIPTION_ID="$AZURE_SUBSCRIPTION_ID"
+az account show --output table
+[ -f terraform.tfvars ] || cp terraform.tfvars.example terraform.tfvars
 ```
 
-The script configures the callback URI, enables ID-token issuance required by Easy Auth's hybrid sign-in response, creates a one-year client secret and writes the client ID and secret to the ignored `environments/foundry-basic-chat/easy-auth.auto.tfvars.json` file with permissions restricted to the current user. Access-token issuance remains disabled. It does not print the secret. It refuses to overwrite an existing credential file or create a duplicate registration. If this file already exists, keep and reuse it. If the file is lost, inspect the existing registration and rotate its credential rather than blindly re-running the create script.
+Edit `terraform.tfvars`: choose a distinct `workload_name` for globally unique service names, confirm the resource group name and region, and set your tags. **Run every remaining command from this directory.** Terraform uses Azure CLI authentication and local state.
 
-Terraform state also contains the Easy Auth secret after deployment. Keep both the variable file and local state private. For more detail on the script's permissions and behaviour, see [the scripts guide](../../scripts/README.md).
+## 2. Create Easy Auth
 
-## Configure and deploy
-
-Copy the example variables file and set the workload, environment, region, instance and resource group values for your Azure estate. The example is already set to the CAF-style UAT names used by this deployment.
+Use the exact App Service name: `app-<workload_name>-<environment>-<instance>`. For the example values:
 
 ```bash
-cp terraform.tfvars.example terraform.tfvars
+bash ../../scripts/create_easy_auth_app.sh --web-app-name app-zimcnait-basic-chat-uat-001
 ```
 
-The generated `easy-auth.auto.tfvars.json` file supplies the Easy Auth values automatically. Both populated files and Terraform state are ignored by Git. Do not commit them.
+The script sets the callback and required ID-token issuance, then saves a one-year secret in the ignored, mode-`0600` `easy-auth.auto.tfvars.json`. Reuse an existing file only while its app and credential remain valid. The script refuses duplicates and overwrites; see [recovery guidance](../../scripts/README.md) if credentials are missing or stale.
 
-From this directory, initialise Terraform, check the configuration, and review the plan before applying:
+## 3. Deploy infrastructure
+
+Run the commands in order and stop if one fails. `init` downloads dependencies; `plan` previews changes; `apply` provisions resources after you review the changes and enter `yes`.
 
 ```bash
 terraform init
-terraform fmt -check -recursive
+terraform fmt -check -recursive ../..
 terraform validate
-tflint --init
-tflint --recursive
+tflint --init --config=../../.tflint.hcl
+tflint --config=../../.tflint.hcl
 terraform plan
 terraform apply
 ```
 
-The deployment uses local state in this environment directory. Do not run the same environment concurrently from another working directory, and back up the state securely before changing machines.
-
-## Create the Search fixture and agent
-
-After the Azure resources and Foundry project connections are ready, install the Python dependencies in a local virtual environment, create the synthetic Search fixture, and create the named prompt agent:
+## 4. Create the Search fixture and agent
 
 ```bash
 python3 -m venv .venv
@@ -75,21 +91,22 @@ python ../../scripts/bootstrap_search.py \
   --endpoint "$(terraform output -raw search_endpoint)" \
   --index "$(terraform output -raw search_index_name)"
 
-python ../../scripts/bootstrap_agent.py
+python ../../scripts/bootstrap_agent.py \
+  --search-index "$(terraform output -raw search_index_name)" \
+  --agent-name "$(terraform output -raw agent_name)"
 terraform apply
 ```
 
-The agent bootstrap writes its exact name and version to the ignored `agent.auto.tfvars.json` file. The second Terraform apply configures the web app to use that version.
+The bootstrap saves the agent name and version in ignored `agent.auto.tfvars.json`. The second apply updates the web app to use that exact version.
 
-## Deploy and verify the web app
-
-Deploy the checksum-verified sample package pinned to the Azure sample commit, then verify that the agent can answer using both Azure AI Search and Bing grounding:
+## 5. Deploy and verify the web app
 
 ```bash
 bash ../../scripts/deploy_chat_web_app.sh
 python ../../scripts/verify_agent.py
+terraform output -raw web_app_url
 ```
 
-Open the URL printed by `terraform output -raw web_app_url` and complete Microsoft Entra sign-in through Easy Auth. The verification script checks the unique Search fixture marker and citation, an external Bing citation, and that both responses use the same conversation and Terraform-managed agent version. Traces may take a few minutes to appear in the Foundry project's **Agents > Traces** view.
+The deployment script verifies the pinned package checksum; the verifier checks Search and Bing grounding. Open the printed URL, sign in with a user from the same Entra tenant and send a chat message. Review traces under **Agents > Traces** in Foundry. Usage incurs Azure charges.
 
-The Search and Bing checks make model and grounding calls that can incur charges. This architecture deliberately retains proof of concept trade-offs, including public service endpoints and single-instance capacity.
+Keep state, plans and populated variable files private and out of Git. Retain local state for future changes and teardown; run only one deployment at a time.
