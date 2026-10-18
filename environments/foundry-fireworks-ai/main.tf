@@ -1,11 +1,24 @@
 data "azurerm_client_config" "current" {}
 
+# Request the subscription-wide pre-release feature. The POST is idempotent and
+# destroy does not unregister it, so other Fireworks workloads are unaffected.
+resource "azapi_resource_action" "fireworks_feature_registration" {
+  type                   = "Microsoft.Features/providers/features@2021-07-01"
+  resource_id            = "/subscriptions/${var.subscription_id}/providers/Microsoft.Features/providers/Microsoft.CognitiveServices/features/Fireworks.EnableDeploy"
+  action                 = "register"
+  method                 = "POST"
+  response_export_values = ["properties.state"]
+}
+
+# Azure approves the feature asynchronously, so read its state after the request.
 data "azapi_resource" "fireworks_feature_registration" {
   type                   = "Microsoft.Features/featureProviders/subscriptionFeatureRegistrations@2021-07-01"
   name                   = "Fireworks.EnableDeploy"
   parent_id              = "/subscriptions/${var.subscription_id}/providers/Microsoft.Features/featureProviders/Microsoft.CognitiveServices"
   ignore_not_found       = true
   response_export_values = ["properties.state"]
+
+  depends_on = [azapi_resource_action.fireworks_feature_registration]
 }
 
 locals {
@@ -28,14 +41,10 @@ locals {
   }
 }
 
-module "resource_group" {
-  source  = "Azure/avm-res-resources-resourcegroup/azurerm"
-  version = "0.4.0"
-
-  name             = var.resource_group_name
-  location         = var.location
-  tags             = local.tags
-  enable_telemetry = false
+resource "azurerm_resource_group" "this" {
+  name     = var.resource_group_name
+  location = var.location
+  tags     = local.tags
 }
 
 module "azure_monitor" {
@@ -43,8 +52,8 @@ module "azure_monitor" {
 
   log_analytics_workspace_name = "log-${local.regional_name}"
   application_insights_name    = "appi-${local.regional_name}"
-  location                     = module.resource_group.location
-  resource_group_name          = module.resource_group.name
+  location                     = azurerm_resource_group.this.location
+  resource_group_name          = azurerm_resource_group.this.name
   tags                         = local.tags
 }
 
@@ -53,8 +62,8 @@ module "foundry" {
 
   name                = "aif-${local.regional_name}"
   project_name        = "proj-${local.regional_name}"
-  location            = module.resource_group.location
-  resource_group_name = module.resource_group.name
+  location            = azurerm_resource_group.this.location
+  resource_group_name = azurerm_resource_group.this.name
   create_project      = true
   # The deployment identity is provisioned outside this root so planning does
   # not bind role assignments to the Azure CLI caller.
@@ -65,7 +74,7 @@ module "foundry" {
   project_connections = {
     application_insights = {
       resource_id = module.azure_monitor.application_insights_id
-      location    = module.resource_group.location
+      location    = azurerm_resource_group.this.location
     }
   }
   tags = local.tags
@@ -112,7 +121,7 @@ resource "azapi_resource" "fireworks_model_deployment" {
   lifecycle {
     precondition {
       condition     = data.azapi_resource.fireworks_feature_registration.exists && try(data.azapi_resource.fireworks_feature_registration.output.properties.state, "") == "Registered"
-      error_message = "Fireworks.EnableDeploy must be Registered in the target subscription. Run scripts/az-register-fireworks-pre-relase-feature.sh, then retry after Azure reports Registered."
+      error_message = "Fireworks.EnableDeploy registration was requested but is not yet Registered in the target subscription. Wait a few minutes, then run terraform plan again."
     }
     precondition {
       condition     = length(trimspace(var.model_version)) > 0 && !startswith(var.model_version, "REPLACE_")

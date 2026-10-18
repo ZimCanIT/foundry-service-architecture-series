@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 umask 077
 
-readonly repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+readonly repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd -P)"
 readonly environment_dir="${repo_root}/environments/foundry-basic-chat"
 readonly output_file="${environment_dir}/easy-auth.auto.tfvars.json"
 
@@ -14,7 +14,7 @@ usage() {
 Create the single-tenant Microsoft Entra application used by the Series 1 App Service Easy Auth.
 
 Usage:
-  scripts/create_easy_auth_app.sh --web-app-name NAME [--display-name NAME]
+  scripts/environments/foundry-basic-chat/create_easy_auth_app.sh --web-app-name NAME [--display-name NAME]
 
 The script uses the current Azure CLI tenant. It configures the callback for
 https://NAME.azurewebsites.net/.auth/login/aad/callback and writes the

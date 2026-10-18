@@ -1,6 +1,6 @@
 # Terraform Modules
 
-This directory contains cohesive capabilities used by the Series 1 basic Microsoft Foundry chat environment.
+This directory contains reusable capabilities shared by the environments in the Microsoft Foundry Service Architecture series. Each environment focuses on one aspect of Foundry, such as basic chat architecture, hosted agents, tools integration or model provider integration, and composes the modules it needs.
 
 | Module | Responsibility |
 | --- | --- |
@@ -10,6 +10,6 @@ This directory contains cohesive capabilities used by the Series 1 basic Microso
 | `azure-monitor` | Log Analytics workspace and Application Insights resource. |
 | `web-app` | Reusable Linux web application configuration and diagnostics. It creates a dedicated App Service plan with the AVM by default, or accepts an existing shared plan. |
 
-The environment root uses the Azure Verified Module for Resource Groups. The reusable `web-app` module uses the Azure Verified Module for App Service plans. The web application itself remains a direct AzureRM resource so sensitive Easy Auth settings can be passed through a sensitive Terraform input. The current published Foundry account, Azure AI Search, Application Insights and Log Analytics AVMs constrain AzureRM to version 4.x or `< 5.0.0`, while this root uses AzureRM 5.8.0 for the Foundry project API. Those resources therefore remain on provider resources in this implementation.
+Each environment root creates its resource group directly with `azurerm_resource_group`. The reusable `web-app` module uses the Azure Verified Module for App Service plans. The web application itself remains a direct AzureRM resource so sensitive Easy Auth settings can be passed through a sensitive Terraform input. The current published Foundry account, Azure AI Search, Application Insights and Log Analytics AVMs constrain AzureRM to version 4.x or `< 5.0.0`, while the environment roots use AzureRM 5.8.0 for the Foundry project API. Those resources therefore remain on provider resources in this implementation.
 
 Foundry account and project resources share one module because the project is a child resource whose identity and connections are configured against its account. The module can also deploy only the account, add a project without a model deployment, or create the account with a model deployment and no project. Project connections are independently optional.

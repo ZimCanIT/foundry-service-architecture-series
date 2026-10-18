@@ -61,10 +61,10 @@ Edit `terraform.tfvars`: choose a distinct `workload_name` for globally unique s
 Use the exact App Service name: `app-<workload_name>-<environment>-<instance>`. For the example values:
 
 ```bash
-bash ../../scripts/create_easy_auth_app.sh --web-app-name app-zimcnait-basic-chat-uat-001
+bash ../../scripts/environments/foundry-basic-chat/create_easy_auth_app.sh --web-app-name app-zimcnait-basic-chat-uat-001
 ```
 
-The script sets the callback and required ID-token issuance, then saves a one-year secret in the ignored, mode-`0600` `easy-auth.auto.tfvars.json`. Reuse an existing file only while its app and credential remain valid. The script refuses duplicates and overwrites; see [recovery guidance](../../scripts/README.md) if credentials are missing or stale.
+The script sets the callback and required ID-token issuance, then saves a one-year secret in the ignored, mode-`0600` `easy-auth.auto.tfvars.json`. Reuse an existing file only while its app and credential remain valid. The script refuses duplicates and overwrites; see [recovery guidance](../../scripts/environments/foundry-basic-chat/README.md) if credentials are missing or stale.
 
 ## 3. Deploy infrastructure
 
@@ -85,13 +85,13 @@ terraform apply
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -r ../../scripts/requirements.txt
+python -m pip install -r ../../scripts/environments/foundry-basic-chat/requirements.txt
 
-python ../../scripts/bootstrap_search.py \
+python ../../scripts/environments/foundry-basic-chat/bootstrap_search.py \
   --endpoint "$(terraform output -raw search_endpoint)" \
   --index "$(terraform output -raw search_index_name)"
 
-python ../../scripts/bootstrap_agent.py \
+python ../../scripts/environments/foundry-basic-chat/bootstrap_agent.py \
   --search-index "$(terraform output -raw search_index_name)" \
   --agent-name "$(terraform output -raw agent_name)"
 terraform apply
@@ -102,8 +102,8 @@ The bootstrap saves the agent name and version in ignored `agent.auto.tfvars.jso
 ## 5. Deploy and verify the web app
 
 ```bash
-bash ../../scripts/deploy_chat_web_app.sh
-python ../../scripts/verify_agent.py
+bash ../../scripts/environments/foundry-basic-chat/deploy_chat_web_app.sh
+python ../../scripts/environments/foundry-basic-chat/verify_agent.py
 terraform output -raw web_app_url
 ```
 
