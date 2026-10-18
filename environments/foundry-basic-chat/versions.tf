@@ -28,7 +28,14 @@ terraform {
 provider "azurerm" {
   use_cli = true
 
-  features {}
+  features {
+    resource_group {
+      # The group is dedicated to this environment, and Azure adds resources that
+      # Terraform does not track, such as the alert rule generated for Application
+      # Insights. Allow destroy to delete them with the group.
+      prevent_deletion_if_contains_resources = false
+    }
+  }
 }
 
 provider "azapi" {

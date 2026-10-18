@@ -15,4 +15,5 @@ repos:
       - id: terraform_tflint
         args:
           - --hook-config=--tool-version=0.64.0
+          - --hook-config=--tool-version-mode=prefer-local
           - --args=--config=__GIT_WORKING_DIR__/.tflint.hcl

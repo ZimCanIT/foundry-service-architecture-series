@@ -12,14 +12,10 @@ locals {
   })
 }
 
-module "resource_group" {
-  source  = "Azure/avm-res-resources-resourcegroup/azurerm"
-  version = "0.4.0"
-
-  name             = var.resource_group_name
-  location         = var.location
-  tags             = local.tags
-  enable_telemetry = false
+resource "azurerm_resource_group" "this" {
+  name     = var.resource_group_name
+  location = var.location
+  tags     = local.tags
 }
 
 module "azure_monitor" {
@@ -27,8 +23,8 @@ module "azure_monitor" {
 
   log_analytics_workspace_name = "log-${local.regional_name}"
   application_insights_name    = "appi-${local.regional_name}"
-  location                     = module.resource_group.location
-  resource_group_name          = module.resource_group.name
+  location                     = azurerm_resource_group.this.location
+  resource_group_name          = azurerm_resource_group.this.name
   tags                         = local.tags
 }
 
@@ -37,8 +33,8 @@ module "foundry" {
 
   name                    = "aif-${local.regional_name}"
   project_name            = "proj-${local.regional_name}"
-  location                = module.resource_group.location
-  resource_group_name     = module.resource_group.name
+  location                = azurerm_resource_group.this.location
+  resource_group_name     = azurerm_resource_group.this.name
   create_project          = true
   deployment_principal_id = data.azurerm_client_config.current.object_id
   model_deployment = {
@@ -55,7 +51,7 @@ module "foundry" {
   project_connections = {
     application_insights = {
       resource_id = module.azure_monitor.application_insights_id
-      location    = module.resource_group.location
+      location    = azurerm_resource_group.this.location
     }
     bing_grounding = {
       resource_id = module.bing_grounding.resource_id
@@ -64,7 +60,7 @@ module "foundry" {
     azure_ai_search = {
       resource_id     = module.azure_ai_search.search_service_id
       endpoint        = module.azure_ai_search.search_service_endpoint
-      location        = module.resource_group.location
+      location        = azurerm_resource_group.this.location
       connection_name = "azure-ai-search"
     }
   }
@@ -76,7 +72,7 @@ module "bing_grounding" {
   source = "../../modules/bing-grounding"
 
   name              = "bing-${local.regional_name}"
-  resource_group_id = module.resource_group.resource_id
+  resource_group_id = azurerm_resource_group.this.id
   tags              = local.tags
 }
 
@@ -84,8 +80,8 @@ module "azure_ai_search" {
   source = "../../modules/azure-ai-search"
 
   name                       = "srch-${local.regional_name}"
-  location                   = module.resource_group.location
-  resource_group_name        = module.resource_group.name
+  location                   = azurerm_resource_group.this.location
+  resource_group_name        = azurerm_resource_group.this.name
   log_analytics_workspace_id = module.azure_monitor.log_analytics_workspace_id
   deployment_principal_id    = data.azurerm_client_config.current.object_id
   tags                       = local.tags
@@ -96,9 +92,9 @@ module "web_app" {
 
   name                      = "app-${local.global_name}"
   service_plan_name         = "asp-${local.regional_name}"
-  location                  = module.resource_group.location
-  resource_group_name       = module.resource_group.name
-  resource_group_id         = module.resource_group.resource_id
+  location                  = azurerm_resource_group.this.location
+  resource_group_name       = azurerm_resource_group.this.name
+  resource_group_id         = azurerm_resource_group.this.id
   service_plan_sku_name     = "B1"
   service_plan_worker_count = 1
   enable_diagnostics        = true
@@ -147,7 +143,7 @@ resource "azurerm_role_assignment" "web_app_app_insights_metrics_publisher" {
 
 output "resource_group_name" {
   description = "Resource group containing this independent proof of concept."
-  value       = module.resource_group.name
+  value       = azurerm_resource_group.this.name
 }
 
 output "foundry_account_name" {

@@ -41,14 +41,10 @@ locals {
   }
 }
 
-module "resource_group" {
-  source  = "Azure/avm-res-resources-resourcegroup/azurerm"
-  version = "0.4.0"
-
-  name             = var.resource_group_name
-  location         = var.location
-  tags             = local.tags
-  enable_telemetry = false
+resource "azurerm_resource_group" "this" {
+  name     = var.resource_group_name
+  location = var.location
+  tags     = local.tags
 }
 
 module "azure_monitor" {
@@ -56,8 +52,8 @@ module "azure_monitor" {
 
   log_analytics_workspace_name = "log-${local.regional_name}"
   application_insights_name    = "appi-${local.regional_name}"
-  location                     = module.resource_group.location
-  resource_group_name          = module.resource_group.name
+  location                     = azurerm_resource_group.this.location
+  resource_group_name          = azurerm_resource_group.this.name
   tags                         = local.tags
 }
 
@@ -66,8 +62,8 @@ module "foundry" {
 
   name                = "aif-${local.regional_name}"
   project_name        = "proj-${local.regional_name}"
-  location            = module.resource_group.location
-  resource_group_name = module.resource_group.name
+  location            = azurerm_resource_group.this.location
+  resource_group_name = azurerm_resource_group.this.name
   create_project      = true
   # The deployment identity is provisioned outside this root so planning does
   # not bind role assignments to the Azure CLI caller.
@@ -78,7 +74,7 @@ module "foundry" {
   project_connections = {
     application_insights = {
       resource_id = module.azure_monitor.application_insights_id
-      location    = module.resource_group.location
+      location    = azurerm_resource_group.this.location
     }
   }
   tags = local.tags

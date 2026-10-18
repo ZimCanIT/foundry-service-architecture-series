@@ -5,7 +5,7 @@ output "subscription_id" {
 
 output "resource_group_name" {
   description = "Resource group containing this Fireworks on Foundry environment."
-  value       = module.resource_group.name
+  value       = azurerm_resource_group.this.name
 }
 
 output "foundry_account_name" {
