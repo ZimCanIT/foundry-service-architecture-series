@@ -1,11 +1,24 @@
 data "azurerm_client_config" "current" {}
 
+# Request the subscription-wide pre-release feature. The POST is idempotent and
+# destroy does not unregister it, so other Fireworks workloads are unaffected.
+resource "azapi_resource_action" "fireworks_feature_registration" {
+  type                   = "Microsoft.Features/providers/features@2021-07-01"
+  resource_id            = "/subscriptions/${var.subscription_id}/providers/Microsoft.Features/providers/Microsoft.CognitiveServices/features/Fireworks.EnableDeploy"
+  action                 = "register"
+  method                 = "POST"
+  response_export_values = ["properties.state"]
+}
+
+# Azure approves the feature asynchronously, so read its state after the request.
 data "azapi_resource" "fireworks_feature_registration" {
   type                   = "Microsoft.Features/featureProviders/subscriptionFeatureRegistrations@2021-07-01"
   name                   = "Fireworks.EnableDeploy"
   parent_id              = "/subscriptions/${var.subscription_id}/providers/Microsoft.Features/featureProviders/Microsoft.CognitiveServices"
   ignore_not_found       = true
   response_export_values = ["properties.state"]
+
+  depends_on = [azapi_resource_action.fireworks_feature_registration]
 }
 
 locals {
@@ -112,7 +125,7 @@ resource "azapi_resource" "fireworks_model_deployment" {
   lifecycle {
     precondition {
       condition     = data.azapi_resource.fireworks_feature_registration.exists && try(data.azapi_resource.fireworks_feature_registration.output.properties.state, "") == "Registered"
-      error_message = "Fireworks.EnableDeploy must be Registered in the target subscription. Run scripts/az-register-fireworks-pre-relase-feature.sh, then retry after Azure reports Registered."
+      error_message = "Fireworks.EnableDeploy registration was requested but is not yet Registered in the target subscription. Wait a few minutes, then run terraform plan again."
     }
     precondition {
       condition     = length(trimspace(var.model_version)) > 0 && !startswith(var.model_version, "REPLACE_")

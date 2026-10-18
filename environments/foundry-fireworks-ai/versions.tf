@@ -30,6 +30,10 @@ provider "azurerm" {
   tenant_id       = var.tenant_id
   use_cli         = true
 
+  # Fireworks deployments need Microsoft.CognitiveServices, which is not in the
+  # provider's default registration set.
+  resource_providers_to_register = ["Microsoft.CognitiveServices"]
+
   features {
     cognitive_account {
       purge_soft_delete_on_destroy = true

@@ -5,17 +5,18 @@ This environment plans a Foundry account, project, monitoring, and a Global Stan
 ## Prerequisites
 
 - Install Azure CLI, Terraform, and TFLint. Set `ARM_SUBSCRIPTION_ID` to the target subscription.
-- Sign in as the deploying user with `Contributor` and `Role Based Access Control Administrator` permissions. Terraform assigns that user the `Foundry Owner` role on the Foundry account. The project's managed identity receives `Foundry User` so it can access the Foundry project.
+- Sign in as the deploying user with subscription-level permission to register resource providers and features (for example `Contributor` at subscription scope), `Contributor` on the workload, and `Role Based Access Control Administrator` permissions. Terraform assigns that user the `Foundry Owner` role on the Foundry account. The project's managed identity receives `Foundry User` so it can access the Foundry project.
 - Review the [Fireworks service terms](https://learn.microsoft.com/en-us/azure/foundry/how-to/fireworks/enable-fireworks-models) and [data handling guidance](https://learn.microsoft.com/azure/foundry/how-to/fireworks/privacy-compliance-faq) against organizational requirements before registration. Fireworks processes customer data outside Microsoft facilities and is excluded from EU Data Boundary commitments.
 
 ## Configure and plan
 
-From the repository root, register the subscription-wide feature:
+Terraform registers the subscription-wide prerequisites. The AzureRM provider registers the `Microsoft.CognitiveServices` resource provider through `resource_providers_to_register`. An AzAPI `POST` action then requests the `Fireworks.EnableDeploy` pre-release feature. Both are idempotent, and `terraform destroy` unregisters neither, so other workloads that depend on Fireworks are unaffected.
+
+Azure approves the feature asynchronously. On a new subscription the first apply can stop before the model deployment, with a message that the feature is not yet `Registered`. Check its state, then plan and apply again once it reports `Registered`:
 
 ```bash
 az login
 az account set --subscription "$ARM_SUBSCRIPTION_ID"
-bash scripts/az-register-fireworks-pre-relase-feature.sh
 az feature registration show \
   --provider-namespace Microsoft.CognitiveServices \
   --name Fireworks.EnableDeploy \
@@ -24,9 +25,7 @@ az feature registration show \
   --output tsv
 ```
 
-Wait for `Registered`; the script reports the current state without polling. Do not unregister while other workloads depend on Fireworks.
-
-Then query the model catalog and select an approved version and available quota:
+Query the model catalog and select an approved version and available quota:
 
 ```bash
 az cognitiveservices model list \
@@ -49,7 +48,7 @@ tflint --config=../../.tflint.hcl
 terraform plan -out=fireworks.tfplan
 ```
 
-Planning rejects an unregistered feature or placeholder model version. Review the saved plan before an explicit apply. `NoAutoUpgrade` pins the model version; plan and review a supported replacement before retirement.
+Planning rejects a placeholder model version, and the deployment is blocked until the feature is `Registered`. Review the saved plan before an explicit apply. `NoAutoUpgrade` pins the model version; plan and review a supported replacement before retirement.
 
 ## Operational notes
 
