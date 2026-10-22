@@ -7,13 +7,24 @@ repos:
       - id: check-yaml
       - id: check-merge-conflict
 
-  - repo: https://github.com/antonbabenko/pre-commit-terraform
-    rev: v1.109.1
+  # Local hooks call terraform and tflint directly, so they run without bash on Windows.
+  - repo: local
     hooks:
-      - id: terraform_fmt
-      - id: terraform_validate
-      - id: terraform_tflint
-        args:
-          - --hook-config=--tool-version=0.64.0
-          - --hook-config=--tool-version-mode=prefer-local
-          - --args=--config=__GIT_WORKING_DIR__/.tflint.hcl
+      - id: terraform-fmt
+        name: Terraform fmt
+        entry: python scripts/shared/terraform_hooks.py fmt
+        language: system
+        files: \.(tf|tfvars)$
+      - id: terraform-validate
+        name: Terraform validate
+        entry: python scripts/shared/terraform_hooks.py validate
+        language: system
+        files: \.tf$
+        exclude: ^(modules|case-studies)/
+        require_serial: true
+      - id: terraform-tflint
+        name: TFLint
+        entry: python scripts/shared/terraform_hooks.py tflint
+        language: system
+        files: \.tf$
+        require_serial: true

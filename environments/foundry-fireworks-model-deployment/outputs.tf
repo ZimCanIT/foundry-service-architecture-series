@@ -47,3 +47,8 @@ output "fireworks_model_version" {
   description = "Pinned DeepSeek V4.1 Flash model version deployed in Foundry."
   value       = var.model_version
 }
+
+output "foundry_project_endpoint" {
+  description = "Foundry project endpoint for calling the model deployment."
+  value       = module.foundry.project_endpoint
+}

@@ -123,6 +123,11 @@ variable "project" {
   type        = string
 }
 
+variable "managed_by" {
+  description = "Tool that manages these resources, recorded in the ManagedBy tag."
+  type        = string
+}
+
 variable "model_deployment_name" {
   description = "Name for the Fireworks model deployment in Foundry."
   type        = string
@@ -138,12 +143,12 @@ variable "model_version" {
   type        = string
 }
 
-variable "model_capacity" {
-  description = "Requested Global Standard throughput capacity in tokens per minute (TPM), subject to model quota."
+variable "model_capacity_thousand_tpm" {
+  description = "Global Standard capacity in thousands of tokens per minute: 25 gives the deployment a 25,000 TPM rate limit. It must fit the subscription's quota for the model in the region."
   type        = number
 
   validation {
-    condition     = var.model_capacity > 0 && var.model_capacity == floor(var.model_capacity)
-    error_message = "model_capacity must be a positive whole number of tokens per minute."
+    condition     = var.model_capacity_thousand_tpm > 0 && var.model_capacity_thousand_tpm == floor(var.model_capacity_thousand_tpm)
+    error_message = "model_capacity_thousand_tpm must be a positive whole number of thousands of tokens per minute."
   }
 }
