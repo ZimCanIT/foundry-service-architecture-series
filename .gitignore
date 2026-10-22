@@ -9,6 +9,7 @@ npm-debug.log*
 
 # Terraform plans and crash logs
 *.tfplan
+tfplan
 crash.log
 crash.*.log
 
@@ -42,9 +43,10 @@ __pycache__/
 *.tfbackend
 *.tfbackend.hcl
 
-# Local Codex instructions
-/AGENTS.md
-/.codex/
+# Local agent instruction files
+AGENTS.md
+CLAUDE.md
+.claude/
 
 # Local documentation content
 /docs/
