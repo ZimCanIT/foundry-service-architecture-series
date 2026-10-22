@@ -1,52 +1,33 @@
 # Foundry Service Architecture Series
 
-## Introduction
+This repository holds the reference deployments for the ZimCanIT YouTube series on Microsoft Foundry in Azure. Each episode covers one part of Foundry, such as basic chat architecture, Foundry Agent Service, tools integration or partner model providers, and has a Terraform environment you can plan, deploy and remove on your own subscription.
 
-This repository contains environment-based reference deployments for the ZimCanIT YouTube series on Microsoft Foundry as a service in Azure. It begins with the basic chat proof of concept and progresses through Foundry Agent Service, hosted agents and further production architecture topics.
+The environments are proofs of concept. Each README states the trade-offs, such as public endpoints or single-region capacity, that you would need to address before production use.
 
-## Local MCP tools
+## Repository layout
 
-The workspace MCP configuration connects to Microsoft Learn's hosted documentation server and a local HashiCorp Terraform MCP server. Start the Terraform server from the repository root with Docker Compose. These examples use `sudo` for hosts where the current user does not have direct access to the Docker daemon; omit it if your account has that access.
+- `environments/`: one Terraform root per architecture, each with its own local state, inputs, outputs, prerequisites and clean-up steps. The [environments overview](environments/README.md) lists them; start with the README of the one you want.
+- `modules/`: reusable modules the environments compose, such as the Foundry account and project, Azure Monitor and Azure AI Search. See the [module catalogue](modules/README.md).
+- `scripts/environments/<environment>/`: Python and shell helpers for each environment, such as agent bootstrap and verification.
+- `case-studies/`: complete, end-to-end deployments of solutions that use Foundry alongside other Azure services, such as image classification or content filtering. Each case study has its own folder with a README and decision record. Their helper scripts live under `scripts/case-studies/<slug>/`.
 
-```bash
-sudo docker compose -f compose.mcp.yaml up -d
-```
+## Working with the code
 
-Expected output:
+You need an Azure subscription, Azure CLI, Terraform `>= 1.10.0, < 2.0.0` and TFLint, plus Python 3 for the helper scripts. The roots pin AzureRM `~> 5.8.0` and AzAPI `~> 2.13.0`; `terraform init` fails on other versions. Sign in with `az login` and set `ARM_SUBSCRIPTION_ID` before you plan. The deployments are keyless by default: Entra ID, managed identities and role assignments in Terraform, with local key authentication disabled.
 
-```text
-[+] Running 2/2
- ✔ Network foundry-service-architecture-series_default  Created      0.0s
- ✔ Container terraform-mcp-server                       Started      0.2s
-```
-
-Check that the container is running:
+The general flow for an environment is:
 
 ```bash
-sudo docker compose -f compose.mcp.yaml ps
+cd environments/<environment>
+cp terraform.tfvars.example terraform.tfvars   # then set your own values
+terraform init
+terraform plan -out=tfplan
+terraform apply tfplan
+terraform destroy                              # when you have finished
 ```
 
-Expected output:
+Applying creates billable Azure resources, so destroy each environment when you have finished with it. Keep `terraform.tfvars`, state files and saved plans private. Git ignores them because they can hold subscription IDs and other sensitive values. For linting and the pre-commit hooks, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-```text
-NAME                   IMAGE                                  COMMAND                  SERVICE         CREATED         STATUS         PORTS
-terraform-mcp-server   hashicorp/terraform-mcp-server:1.3.0   "/bin/terraform-mcp-…"   terraform-mcp   7 seconds ago   Up 6 seconds   127.0.0.1:8080->8080/tcp
-```
+## Licence
 
-Check the HTTP health endpoint:
-
-```bash
-curl -fsS http://127.0.0.1:8080/health
-```
-
-Expected output:
-
-```json
-{"status":"ok","service":"terraform-mcp-server","transport":"streamable-http","endpoint":"/mcp","version":"1.3.0"}
-```
-
-The MCP endpoint is bound to loopback at `http://127.0.0.1:8080/mcp`. Stop the server with:
-
-```bash
-sudo docker compose -f compose.mcp.yaml down
-```
+See [LICENSE](LICENSE).
