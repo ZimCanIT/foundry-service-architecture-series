@@ -14,7 +14,11 @@ resource "random_string" "key_vault_suffix" {
 
 locals {
   # Shorter than local.regional_name because Key Vault names are 3 to 24 characters and globally unique.
-  key_vault_name = var.key_vault.enabled ? "kv-${var.key_vault.name_stem}-${var.environment}-${var.region_code}-${random_string.key_vault_suffix[0].result}" : null
+  # The fixed parts are known at plan time, unlike the random suffix, so the length check uses them:
+  # "kv-" + stem + "-" + environment + "-" + region_code + "-" + five-character suffix.
+  key_vault_name_stem   = "${var.key_vault.name_stem}-${var.environment}-${var.region_code}"
+  key_vault_name_length = length(local.key_vault_name_stem) + 9
+  key_vault_name        = var.key_vault.enabled ? "kv-${var.key_vault.name_stem}-${var.environment}-${var.region_code}-${random_string.key_vault_suffix[0].result}" : null
 }
 
 resource "azurerm_key_vault" "fireworks" {
@@ -32,9 +36,8 @@ resource "azurerm_key_vault" "fireworks" {
 
   lifecycle {
     precondition {
-      condition = length(local.key_vault_name) <= 24 && !strcontains(local.key_vault_name, "--")
-      # The name holds a random suffix that is unknown at plan time, so the message cannot include it.
-      error_message = "The Key Vault name must be at most 24 characters with no consecutive hyphens. Shorten key_vault.name_stem, environment or region_code."
+      condition     = local.key_vault_name_length <= 24 && !strcontains(local.key_vault_name_stem, "--")
+      error_message = "The Key Vault name kv-${local.key_vault_name_stem}-<suffix> would be ${local.key_vault_name_length} characters; the limit is 24 with no consecutive hyphens. Shorten key_vault.name_stem, environment or region_code."
     }
   }
 }
