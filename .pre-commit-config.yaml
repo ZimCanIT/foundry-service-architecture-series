@@ -1,11 +1,18 @@
+# Scanner, actionlint and zizmor run as CI steps in .github/workflows, not as pre-commit hooks.
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v6.0.0
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c # frozen: v6.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
       - id: check-merge-conflict
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: check-case-conflict
+      - id: check-added-large-files
+      - id: check-json
+      - id: detect-private-key
 
   # Local hooks call terraform and tflint directly, so they run without bash on Windows.
   - repo: local
@@ -14,7 +21,7 @@ repos:
         name: Terraform fmt
         entry: python scripts/shared/terraform_hooks.py fmt
         language: system
-        files: \.(tf|tfvars)$
+        files: \.(tf|tfvars|tftest\.hcl|tfmock\.hcl)$
       - id: terraform-validate
         name: Terraform validate
         entry: python scripts/shared/terraform_hooks.py validate
@@ -28,3 +35,10 @@ repos:
         language: system
         files: \.tf$
         require_serial: true
+      # State, plans, populated variables and .env files must stay out of git. Only *.example copies may be committed.
+      - id: forbid-sensitive-files
+        name: Forbid state, plans, populated variables and .env files
+        entry: 'Remove this file from the commit and keep it out of git. Only *.example copies may be committed.'
+        language: fail
+        files: '(^|/)([^/]*\.tfstate(\.[^/]*)?|[^/]*\.tfplan|[^/]*\.tfvars(\.json)?|\.env(\.[^/]*)?)$'
+        exclude: '\.example$'
