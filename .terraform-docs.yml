@@ -21,6 +21,7 @@ settings:
   default: true
   escape: true
   hide-empty: true
+  indent: 3
   html: false
   lockfile: false
   required: true
