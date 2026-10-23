@@ -138,8 +138,18 @@ variable "model_deployment_name" {
   }
 }
 
+variable "model_name" {
+  description = "Fireworks model to deploy, by the name the Fireworks model catalog on Microsoft Learn lists, for example FW-DeepSeek-V4.1-Flash. Use the catalogue name, not a dated build such as FW-DeepSeek-V4.1-Flash-1017: calls to a deployment of that build returned unknown_model. Changing it replaces the deployment."
+  type        = string
+
+  validation {
+    condition     = can(regex("^FW-[A-Za-z0-9][A-Za-z0-9._-]*$", var.model_name))
+    error_message = "model_name must be a Fireworks catalogue model name such as FW-DeepSeek-V4.1-Flash."
+  }
+}
+
 variable "model_version" {
-  description = "Approved exact DeepSeek V4.1 Flash model version from the Azure model catalog."
+  description = "Approved exact version of the model named in model_name, from the Azure model catalog."
   type        = string
 }
 

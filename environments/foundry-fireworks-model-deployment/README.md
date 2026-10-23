@@ -1,6 +1,6 @@
 # Fireworks AI on Microsoft Foundry
 
-This environment shows how to enable Fireworks AI models in Azure. Terraform registers the `Microsoft.CognitiveServices` provider and the `Fireworks.EnableDeploy` feature on the subscription, then creates a Foundry account and project and a Global Standard deployment of DeepSeek V4.1 Flash (`FW-DeepSeek-V4.1-Flash-1017`, the latest build) through Fireworks AI. The shared Foundry module also needs Log Analytics and Application Insights, so the plan includes them. There are no agents, tools or model comparisons. The example uses Sweden Central.
+This environment shows how to enable Fireworks AI models in Azure. Terraform registers the `Microsoft.CognitiveServices` provider and the `Fireworks.EnableDeploy` feature on the subscription, then creates a Foundry account and project and a Global Standard deployment of DeepSeek V4.1 Flash (`FW-DeepSeek-V4.1-Flash`) through Fireworks AI. The shared Foundry module also needs Log Analytics and Application Insights, so the plan includes them. There are no agents, tools or model comparisons. The example uses Sweden Central.
 
 The account name ends in a five-character random suffix from the `random` provider. The name doubles as the custom subdomain of the account's endpoint, which must be unique and cannot be changed after creation, so the suffix keeps it globally unique. It is stored in state, so a destroy followed by an apply produces a new name. See [custom subdomain names](https://learn.microsoft.com/azure/ai-services/cognitive-services-custom-subdomains). [Learn]
 
@@ -35,11 +35,11 @@ bash scripts/shared/check_foundry_model_capacity.sh --location swedencentral --m
 
 The script wraps `az cognitiveservices model list`, `az cognitiveservices usage list` and the Model Capacities API, and changes nothing in Azure. Take `model_version` from the Version column and `model_capacity_thousand_tpm` from the Quota and Available columns, and check Status and Retires before pinning a version. While the feature is still `NotRegistered`, the catalogue lists no Fireworks models and the script reports no matches. [Measured] `bash scripts/shared/check_foundry_model_capacity.sh --help` describes the other options, such as `--provider anthropic` on its own or `--no-capacity` for a faster run.
 
-From `environments/foundry-fireworks-model-deployment`, copy the [example variables](terraform.tfvars.example), replace IDs and organizational tags, and set `model_version` and `model_capacity_thousand_tpm` for the approved offer:
+From `environments/foundry-fireworks-model-deployment`, copy the [example variables](terraform.tfvars.example), replace IDs and organizational tags, and set `model_name`, `model_version` and `model_capacity_thousand_tpm` for the approved offer:
 
 ```bash
 cp terraform.tfvars.example terraform.tfvars
-# Replace placeholder IDs, tags, model_version, and model_capacity_thousand_tpm before continuing.
+# Replace placeholder IDs, tags, model_name, model_version, and model_capacity_thousand_tpm before continuing.
 terraform init -lockfile=readonly
 terraform fmt -check -recursive
 terraform validate

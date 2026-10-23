@@ -161,7 +161,7 @@ resource "azapi_resource" "fireworks_model_deployment" {
       deploymentState = "Running"
       model = {
         format    = "Fireworks"
-        name      = "FW-DeepSeek-V4.1-Flash-1017"
+        name      = var.model_name
         publisher = "Fireworks AI"
         version   = var.model_version
       }
@@ -175,6 +175,9 @@ resource "azapi_resource" "fireworks_model_deployment" {
   }
 
   response_export_values = ["properties.model", "properties.deploymentState", "sku"]
+
+  # Replace the deployment, rather than update it in place, when the model changes.
+  replace_triggers_external_values = [var.model_name]
 
   depends_on = [azurerm_role_assignment.deployment_user_foundry_owner]
 
