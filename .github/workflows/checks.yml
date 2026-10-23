@@ -1,0 +1,230 @@
+# Pull-request checks. Every job runs on a GitHub-hosted runner with no Azure access:
+# no azure/login, no id-token permission and no repository secrets are used here.
+name: Checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches:
+      - main
+      # Temporary: lets this workflow run on its branch before the pull request is open.
+      # Remove this entry once the pull request into main has run its checks.
+      - feature/github-actions-ci
+  schedule:
+    - cron: "23 6 * * 1" # Mondays: full-history secret scan and latest providers
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  TERRAFORM_VERSION: "1.15.9" # Also the default image in scripts/shared/docker_tool.py
+  TFLINT_VERSION: "v0.64.0"
+  PRE_COMMIT_VERSION: "4.7.0"
+  REFERENCE_ROOT: environments/foundry-fireworks-model-deployment
+
+jobs:
+  pre-commit:
+    name: pre-commit
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+      - name: Set up TFLint
+        uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337 # v6.3.2
+        with:
+          tflint_version: ${{ env.TFLINT_VERSION }}
+      - name: Install pre-commit
+        run: python -m pip install "pre-commit==${PRE_COMMIT_VERSION}"
+      - name: Run pre-commit
+        env:
+          # The TFLint hook runs tflint --init, which downloads the ruleset from GitHub.
+          GITHUB_TOKEN: ${{ github.token }}
+        run: pre-commit run --all-files --show-diff-on-failure --color=always
+      # rhysd/actionlint 1.7.12 (newest release published on or before 2026-10-09)
+      - name: actionlint
+        run: >
+          docker run --rm -v "$GITHUB_WORKSPACE:/repo" -w /repo
+          rhysd/actionlint:1.7.12
+      # zizmorcore/zizmor 1.30.1 (newest release published on or before 2026-10-09)
+      - name: zizmor
+        env:
+          # Read by zizmor for its online audits. The token is read-only for this job.
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >
+          docker run --rm -e GITHUB_TOKEN -v "$GITHUB_WORKSPACE:/repo" -w /repo
+          ghcr.io/zizmorcore/zizmor:1.30.1 --no-progress .github/
+
+  secrets:
+    name: secrets
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      # Pull requests scan base..head and pushes scan before..after. Schedule and manual runs
+      # set neither, so the scanner covers the whole history.
+      BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+      HEAD: ${{ github.event.pull_request.head.sha || github.event.after }}
+    steps:
+      - name: Check out the full history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # Betterleaks 1.9.0, checked against the SHA-256 in the release's checksums.txt.
+      - name: Install Betterleaks
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/betterleaks.tar.gz" https://github.com/betterleaks/betterleaks/releases/download/v1.9.0/betterleaks_1.9.0_linux_x64.tar.gz
+          echo "f8b185a39ffcece2a1ca82bf3a4e7435cd81963ffd16b7a9128daf75f35f6de7  $RUNNER_TEMP/betterleaks.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/betterleaks.tar.gz" -C "$RUNNER_TEMP" betterleaks
+      - name: Scan
+        # Findings are redacted. --validation is never passed, so nothing is sent to live APIs.
+        run: |
+          if [ -n "$BASE" ] && [ "$BASE" != "0000000000000000000000000000000000000000" ] && [ -n "$HEAD" ]; then
+            range="$BASE..$HEAD"
+          else
+            range="--all"
+          fi
+          "$RUNNER_TEMP/betterleaks" git . --log-opts="$range" --redact=100 --exit-code 1 --no-banner --no-color
+
+  module-tests-pinned:
+    name: module tests (pinned providers)
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+      - name: Create the provider cache
+        env:
+          TF_PLUGIN_CACHE_DIR: ${{ runner.temp }}/terraform-plugins
+        run: mkdir -p "$TF_PLUGIN_CACHE_DIR"
+      - name: Run module tests with pinned providers
+        env:
+          TF_PLUGIN_CACHE_DIR: ${{ runner.temp }}/terraform-plugins
+        run: python scripts/shared/module_tests.py --providers pinned --lock-from "$REFERENCE_ROOT"
+
+  module-tests-latest:
+    name: module tests (latest providers)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # Advisory: a failure here is reported but does not block the merge.
+    continue-on-error: true
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+      - name: Create the provider cache
+        env:
+          TF_PLUGIN_CACHE_DIR: ${{ runner.temp }}/terraform-plugins
+        run: mkdir -p "$TF_PLUGIN_CACHE_DIR"
+      - name: Run module tests with latest providers
+        env:
+          TF_PLUGIN_CACHE_DIR: ${{ runner.temp }}/terraform-plugins
+        run: python scripts/shared/module_tests.py --providers latest
+
+  commit-messages:
+    name: commit messages
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      BASE: ${{ github.event.pull_request.base.sha }}
+      HEAD: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Check out the full history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # Conventional Commits, checked by commitlint with the rules in .commitlintrc.yml.
+      - name: Lint the commit messages in the pull request
+        run: >
+          npx --yes -p @commitlint/cli@21.2.3 -p @commitlint/config-conventional@21.2.3
+          commitlint --from "$BASE" --to "$HEAD" --verbose
+
+  terraform-docs:
+    name: terraform docs
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # terraform-docs 0.24.0, checked against the SHA-256 in the release's checksum file.
+      - name: Install terraform-docs
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/terraform-docs.tar.gz" https://github.com/terraform-docs/terraform-docs/releases/download/v0.24.0/terraform-docs-v0.24.0-linux-amd64.tar.gz
+          echo "9005daf969de0b50134493a2c00078b49f5f5b39d021cda7c89bf4d4f3d776d3  $RUNNER_TEMP/terraform-docs.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/terraform-docs.tar.gz" -C "$RUNNER_TEMP" terraform-docs
+      - name: Check that each module README with a generated section is up to date
+        run: |
+          status=0
+          for readme in modules/*/README.md; do
+            grep -q "BEGIN_TF_DOCS" "$readme" || continue
+            "$RUNNER_TEMP/terraform-docs" -c .terraform-docs.yml --output-check "$(dirname "$readme")" || status=1
+          done
+          exit "$status"
+
+  branch-protection:
+    name: branch protection
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+    steps:
+      # Reads the rules GitHub enforces on main, so a ruleset that targets no branch fails here.
+      - name: Check the rules on main and branch deletion after merge
+        run: |
+          active=$(gh api "repos/$REPO/rules/branches/main" --jq '[.[].type] | unique | join(" ")')
+          echo "Rules on main: ${active:-none}"
+          status=0
+          for rule in deletion non_fast_forward pull_request; do
+            case " $active " in *" $rule "*) ;; *) echo "::error::main is missing the $rule rule"; status=1 ;; esac
+          done
+          if [ "$(gh api "repos/$REPO" --jq '.delete_branch_on_merge')" != "true" ]; then
+            echo "::error::Automatically delete head branches is off"; status=1
+          fi
+          exit "$status"
