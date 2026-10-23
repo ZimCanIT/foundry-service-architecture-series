@@ -1,0 +1,6 @@
+# Conventional Commits 1.0.0 through commitlint's conventional preset. Types: build, chore,
+# ci, docs, feat, fix, perf, refactor, revert, style and test. Merge commits are ignored.
+extends:
+  - "@commitlint/config-conventional"
+rules:
+  header-max-length: [2, always, 72]
