@@ -439,3 +439,33 @@ run "budget_start_not_first_of_month" {
     var.budget,
   ]
 }
+
+run "placeholder_model_version" {
+  command = plan
+
+  override_data {
+    target = data.azapi_resource.fireworks_feature
+    values = {
+      exists = true
+      output = {
+        properties = {
+          state = "Registered"
+        }
+      }
+    }
+  }
+
+  variables {
+    adapters = {
+      deploy-a = {
+        model_name    = "custom-model-a"
+        model_version = "REPLACE_WITH_REGISTERED_VERSION"
+        ptu_capacity  = 50
+      }
+    }
+  }
+
+  expect_failures = [
+    azapi_resource.byow_deployment,
+  ]
+}

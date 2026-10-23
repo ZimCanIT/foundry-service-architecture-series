@@ -114,3 +114,28 @@ run "name_too_long" {
     azurerm_key_vault.fireworks,
   ]
 }
+
+run "key_vault_enabled" {
+  command = plan
+
+  variables {
+    key_vault = {
+      enabled = true
+    }
+  }
+
+  assert {
+    condition     = length(azurerm_key_vault.fireworks) == 1 && azurerm_key_vault.fireworks[0].rbac_authorization_enabled
+    error_message = "Enabling the vault must plan one RBAC vault."
+  }
+
+  assert {
+    condition     = length(azurerm_role_assignment.key_vault_secrets_officer) == 1 && azurerm_role_assignment.key_vault_secrets_officer[0].role_definition_name == "Key Vault Secrets Officer"
+    error_message = "The deploying user must get Key Vault Secrets Officer on the vault."
+  }
+
+  assert {
+    condition     = length(azurerm_monitor_diagnostic_setting.key_vault) == 1
+    error_message = "The vault must send AuditEvent logs to the workspace."
+  }
+}

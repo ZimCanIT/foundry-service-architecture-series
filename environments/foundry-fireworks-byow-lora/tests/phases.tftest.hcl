@@ -150,6 +150,11 @@ run "phase2_one_adapter" {
     condition     = azapi_resource.byow_deployment["deploy-a"].body.sku.capacity == 50
     error_message = "The deployment capacity must match ptu_capacity."
   }
+
+  assert {
+    condition     = azapi_resource.byow_deployment["deploy-a"].tags["PtuApprover"] == "platform-approver"
+    error_message = "The deployment must carry the approver's name as the PtuApprover tag."
+  }
 }
 
 run "two_adapters" {
@@ -198,5 +203,29 @@ run "two_adapters" {
   assert {
     condition     = output.ptu_total == 75
     error_message = "The total capacity must be the sum of both adapters."
+  }
+}
+
+run "inference_principal_mapped" {
+  command = plan
+
+  variables {
+    inference_principals = {
+      app = {
+        principal_id   = "77777777-7777-7777-7777-777777777777"
+        principal_type = "ServicePrincipal"
+        role           = "Cognitive Services User"
+      }
+    }
+  }
+
+  assert {
+    condition     = local.foundry_role_assignments["inference-app"].role_definition_name == "Cognitive Services User" && local.foundry_role_assignments["inference-app"].principal_type == "ServicePrincipal"
+    error_message = "Each inference principal must map to an inference-<key> role assignment with its role and type."
+  }
+
+  assert {
+    condition     = local.foundry_role_assignments["deployer"].role_definition_name == "Foundry Owner"
+    error_message = "The deploying user must keep Foundry Owner."
   }
 }
