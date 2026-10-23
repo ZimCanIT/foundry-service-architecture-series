@@ -1,0 +1,56 @@
+# Copy to terraform.tfvars (git-ignored) and replace every REPLACE_ value.
+subscription_id     = "00000000-0000-0000-0000-000000000000"
+tenant_id           = "00000000-0000-0000-0000-000000000000"
+workload_name       = "zimcanit-fwlora"
+business_unit       = "ZimCanIT"
+data_classification = "Internal"
+criticality         = "Low"
+department          = "Engineering"
+resource_group_name = "rg-zimcanit-fwlora-uat-sc-001"
+location            = "swedencentral"
+region_code         = "sc"
+environment         = "uat"
+instance            = "001"
+owner               = "REPLACE_WITH_OWNER"
+ops_team            = "ZimCanIT"
+support_group       = "Cloud Platform"
+service_level       = "REPLACE_WITH_SERVICE_LEVEL"
+project             = "foundry-fireworks-byow-lora"
+managed_by          = "Terraform"
+
+# Backstop for the hourly PTU meter. Set amount from the portal's hourly figure times the
+# planned hours, plus the small fixed resources. The recipient stays in terraform.tfvars only.
+budget = {
+  amount                = 0 # REPLACE with the approved monthly amount
+  start_date            = "2026-11-01T00:00:00Z"
+  alert_email_addresses = ["REPLACE_WITH_ALERT_EMAIL@example.com"]
+}
+
+# Callers of the deployments, keyed by a stable label. role is Foundry User or Cognitive Services User.
+inference_principals = {}
+
+# Optional vault for the Fireworks API key; firectl signin needs no key.
+key_vault = {
+  enabled = false
+}
+
+# Phase 1: no adapters, so no PTUs are created.
+adapters = {}
+
+# Phase 2, after the adapter shows as Registered in the Foundry project:
+# adapters = {
+#   norrvik-triage = {
+#     model_name    = "REPLACE_WITH_REGISTERED_NAME"
+#     model_version = "1"
+#     ptu_capacity  = 0 # REPLACE with the portal value
+#   }
+# }
+
+# Every value here must be set by the approver before a deployment can be planned.
+ptu_gate = {
+  approved = false
+  approver = ""
+  cap      = 0
+  # minimum   = 0 # REPLACE with the deploy dialog's minimum
+  # increment = 0 # REPLACE with the deploy dialog's increment
+}
