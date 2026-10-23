@@ -1,0 +1,27 @@
+# terraform-docs settings for the module READMEs. CI fails when a generated section is out
+# of date. Refresh one from the repository root with:
+#   terraform-docs -c .terraform-docs.yml modules/<name>
+formatter: markdown table
+version: ">= 0.24.0, < 1.0.0"
+
+output:
+  file: README.md
+  mode: inject
+  template: |-
+    <!-- BEGIN_TF_DOCS -->
+    {{ .Content }}
+    <!-- END_TF_DOCS -->
+
+sort:
+  enabled: true
+  by: required
+
+settings:
+  anchor: false
+  default: true
+  escape: true
+  hide-empty: true
+  html: false
+  lockfile: false
+  required: true
+  type: true
