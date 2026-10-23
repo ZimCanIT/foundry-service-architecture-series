@@ -6,6 +6,7 @@ Each implemented directory below this path is an independently deployable Terraf
 | --- | --- |
 | [foundry-basic-chat](foundry-basic-chat/README.md) | The initial proof of concept: Foundry with GPT-4.1, Azure AI Search, Bing grounding, Azure Monitor and an App Service chat UI with Easy Auth. |
 | [foundry-fireworks-model-deployment](foundry-fireworks-model-deployment/README.md) | Enables Fireworks AI on the subscription and deploys DeepSeek V4.1 Flash to a Foundry account and project. |
+| [foundry-fireworks-byow-lora](foundry-fireworks-byow-lora/README.md) | Preview: deploys a LoRA adapter trained on Fireworks and imported into a Foundry project, as a `FireworksCustom` model on Global Provisioned capacity behind a PTU approval gate and a budget. |
 
 The `foundry-agent-service` directory is reserved for the next architecture stage and contains no deployment yet. Add a root module when that architecture is in scope and needs its own state boundary, and add a row to this table.
 
