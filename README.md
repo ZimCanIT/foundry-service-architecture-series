@@ -28,6 +28,20 @@ terraform destroy                              # when you have finished
 
 Applying creates billable Azure resources, so destroy each environment when you have finished with it. Keep `terraform.tfvars`, state files and saved plans private. Git ignores them because they can hold subscription IDs and other sensitive values. For linting and the pre-commit hooks, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
+### Pre-commit checks
+
+The repository uses [pre-commit](https://pre-commit.com), a Python tool, to run file hygiene checks plus Terraform fmt, validate and TFLint before each commit. Set it up once from the repository root:
+
+```bash
+python -m pip install --user pre-commit   # or: pipx install pre-commit
+python -m pre_commit install              # installs the Git hook from .pre-commit-config.yaml
+python -m pre_commit run --all-files      # run everything now
+```
+
+The Terraform and TFLint hooks are local Python hooks in `scripts/shared/terraform_hooks.py`, so they run on Windows without bash. They call the `terraform` and `tflint` binaries on your `PATH`.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the TFLint version and ruleset details.
+
 ## Licence
 
 See [LICENSE](LICENSE).
