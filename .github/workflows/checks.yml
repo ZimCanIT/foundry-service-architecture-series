@@ -16,13 +16,13 @@ permissions:
 
 concurrency:
   group: checks-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Only a newer push to the same pull request cancels a run; main and the schedule always finish.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  TERRAFORM_VERSION: "1.15.9" # Also the default image in scripts/shared/docker_tool.py
+  TERRAFORM_VERSION: "1.15.9"
   TFLINT_VERSION: "v0.64.0"
-  PRE_COMMIT_VERSION: "4.7.0"
-  REFERENCE_ROOT: environments/foundry-fireworks-model-deployment
+  PRE_COMMIT_VERSION: "4.6.2"
 
 jobs:
   pre-commit:
@@ -59,7 +59,7 @@ jobs:
       - name: actionlint
         run: >
           docker run --rm -v "$GITHUB_WORKSPACE:/repo" -w /repo
-          rhysd/actionlint:1.7.12
+          rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
       # zizmorcore/zizmor 1.30.1 (newest release published on or before 2026-10-09)
       - name: zizmor
         env:
@@ -67,7 +67,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: >
           docker run --rm -e GITHUB_TOKEN -v "$GITHUB_WORKSPACE:/repo" -w /repo
-          ghcr.io/zizmorcore/zizmor:1.30.1 --no-progress .github/
+          ghcr.io/zizmorcore/zizmor:1.30.1@sha256:a2eb396d886c053073405c7a980f2139ba2248ec172243cfa3841e57196e8101 --no-progress .github/
 
   secrets:
     name: secrets
@@ -100,11 +100,21 @@ jobs:
           fi
           "$RUNNER_TEMP/betterleaks" git . --log-opts="$range" --redact=100 --exit-code 1 --no-banner --no-color
 
-  module-tests-pinned:
-    name: module tests (pinned providers)
-    if: github.event_name != 'schedule'
+  module-tests:
+    name: module tests (${{ matrix.track }} providers)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - track: pinned
+            lock-from: environments/foundry-fireworks-model-deployment
+          - track: latest
+            lock-from: ""
+    # The latest track is advisory on pull requests and pushes. On the Monday run it fails,
+    # so a provider release that breaks a module is reported.
+    continue-on-error: ${{ matrix.track == 'latest' && github.event_name != 'schedule' }}
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -119,47 +129,39 @@ jobs:
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
-      - name: Create the provider cache
+      - name: Run module tests
         env:
           TF_PLUGIN_CACHE_DIR: ${{ runner.temp }}/terraform-plugins
-        run: mkdir -p "$TF_PLUGIN_CACHE_DIR"
-      - name: Run module tests with pinned providers
-        env:
-          TF_PLUGIN_CACHE_DIR: ${{ runner.temp }}/terraform-plugins
-        run: python scripts/shared/module_tests.py --providers pinned --lock-from "$REFERENCE_ROOT"
+          TRACK: ${{ matrix.track }}
+          LOCK_FROM: ${{ matrix.lock-from }}
+        run: |
+          mkdir -p "$TF_PLUGIN_CACHE_DIR"
+          python scripts/shared/module_tests.py --providers "$TRACK" ${LOCK_FROM:+--lock-from "$LOCK_FROM"}
 
-  module-tests-latest:
-    name: module tests (latest providers)
+  branch-name:
+    name: branch name
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    # Advisory: a failure here is reported but does not block the merge.
-    continue-on-error: true
+    timeout-minutes: 5
+    env:
+      BRANCH: ${{ github.head_ref }}
     steps:
-      - name: Check out the repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.14"
-      - name: Set up Terraform
-        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
-        with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
-          terraform_wrapper: false
-      - name: Create the provider cache
-        env:
-          TF_PLUGIN_CACHE_DIR: ${{ runner.temp }}/terraform-plugins
-        run: mkdir -p "$TF_PLUGIN_CACHE_DIR"
-      - name: Run module tests with latest providers
-        env:
-          TF_PLUGIN_CACHE_DIR: ${{ runner.temp }}/terraform-plugins
-        run: python scripts/shared/module_tests.py --providers latest
+      # <type>/<topic>: a Conventional Commit type, then lower-case words joined by hyphens.
+      # Dependabot names its own branches under dependabot/.
+      - name: Check the branch name
+        run: |
+          pattern='^(feat|fix|docs|chore|refactor|test|ci|build|perf|style|revert)/[a-z0-9]+(-[a-z0-9]+)*$'
+          if [[ "$BRANCH" =~ $pattern || "$BRANCH" == dependabot/* ]]; then
+            echo "Branch name $BRANCH matches <type>/<topic>."
+          else
+            echo "::error::Branch $BRANCH does not match <type>/<topic>, for example feat/module-test-runner."
+            exit 1
+          fi
 
   commit-messages:
     name: commit messages
-    if: github.event_name == 'pull_request'
+    # Dependabot writes its own messages, which can exceed the length limits, so its pull requests skip this.
+    if: github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
@@ -217,7 +219,7 @@ jobs:
           active=$(gh api "repos/$REPO/rules/branches/main" --jq '[.[].type] | unique | join(" ")')
           echo "Rules on main: ${active:-none}"
           status=0
-          for rule in deletion non_fast_forward pull_request; do
+          for rule in deletion non_fast_forward pull_request required_status_checks; do
             case " $active " in *" $rule "*) ;; *) echo "::error::main is missing the $rule rule"; status=1 ;; esac
           done
           exit "$status"
