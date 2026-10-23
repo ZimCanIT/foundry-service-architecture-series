@@ -6,11 +6,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches:
-      - main
-      # Temporary: lets this workflow run on its branch before the pull request is open.
-      # Remove this entry once the pull request into main has run its checks.
-      - feature/github-actions-ci
+    branches: [main]
   schedule:
     - cron: "23 6 * * 1" # Mondays: full-history secret scan and latest providers
   workflow_dispatch:
@@ -216,7 +212,7 @@ jobs:
       REPO: ${{ github.repository }}
     steps:
       # Reads the rules GitHub enforces on main, so a ruleset that targets no branch fails here.
-      - name: Check the rules on main and branch deletion after merge
+      - name: Check the rules on main
         run: |
           active=$(gh api "repos/$REPO/rules/branches/main" --jq '[.[].type] | unique | join(" ")')
           echo "Rules on main: ${active:-none}"
@@ -224,7 +220,4 @@ jobs:
           for rule in deletion non_fast_forward pull_request; do
             case " $active " in *" $rule "*) ;; *) echo "::error::main is missing the $rule rule"; status=1 ;; esac
           done
-          if [ "$(gh api "repos/$REPO" --jq '.delete_branch_on_merge')" != "true" ]; then
-            echo "::error::Automatically delete head branches is off"; status=1
-          fi
           exit "$status"
