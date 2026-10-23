@@ -24,18 +24,24 @@ def run(cmd: list[str], cwd: Path) -> int:
     return subprocess.run(cmd, cwd=cwd).returncode
 
 
+def init(directory: Path) -> int:
+    if (directory / ".terraform").is_dir():
+        return 0
+    # Modules have no lock file, so only roots read it as read-only.
+    lock = ["-lockfile=readonly"] if (directory / ".terraform.lock.hcl").exists() else []
+    return run([*TERRAFORM, "init", "-backend=false", "-input=false", *lock], directory)
+
+
 def check(action: str, directory: Path) -> int:
     if action == "fmt":
         return run([*TERRAFORM, "fmt", "-check", "-diff"], directory)
     if action == "validate":
-        if not (directory / ".terraform").is_dir():
-            # Modules have no lock file, so only roots read it as read-only.
-            lock = ["-lockfile=readonly"] if (directory / ".terraform.lock.hcl").exists() else []
-            if run([*TERRAFORM, "init", "-backend=false", "-input=false", *lock], directory):
-                return 1
+        if init(directory):
+            return 1
         return run([*TERRAFORM, "validate", "-no-color"], directory)
     if action == "tflint":
-        if run([*TFLINT, "--init", f"--config={TFLINT_CONFIG}"], directory):
+        # call_module_type = "all" in .tflint.hcl needs registry modules installed by init.
+        if init(directory) or run([*TFLINT, "--init", f"--config={TFLINT_CONFIG}"], directory):
             return 1
         return run([*TFLINT, f"--config={TFLINT_CONFIG}"], directory)
     raise SystemExit(f"Unknown action: {action}")
