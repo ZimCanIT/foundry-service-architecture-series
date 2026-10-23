@@ -18,6 +18,7 @@ service_level          = "REPLACE_WITH_SERVICE_LEVEL"
 project                = "foundry-fireworks-ai"
 managed_by             = "Terraform"
 model_deployment_name  = "deepseek-v4-1-flash"
+model_name             = "FW-DeepSeek-V4.1-Flash"
 model_version          = "1"
 # Thousands of tokens per minute (25 = 25,000 TPM); must fit the model's quota, see scripts/shared/check_foundry_model_capacity.sh.
 model_capacity_thousand_tpm = 25
