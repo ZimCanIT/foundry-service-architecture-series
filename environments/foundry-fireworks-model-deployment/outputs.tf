@@ -52,3 +52,8 @@ output "foundry_project_endpoint" {
   description = "Foundry project endpoint for calling the model deployment."
   value       = module.foundry.project_endpoint
 }
+
+output "log_analytics_workspace_id" {
+  description = "Resource ID of the Log Analytics workspace that holds the account's diagnostic logs and metrics."
+  value       = module.azure_monitor.log_analytics_workspace_id
+}
