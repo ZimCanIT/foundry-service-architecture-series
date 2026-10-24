@@ -39,6 +39,11 @@ override.tf.json
 __pycache__/
 *.py[cod]
 
+# Datasets, adapters and other working files from the LoRA scripts
+.byow-work/
+*.safetensors
+adapter_model.bin
+
 # Local Terraform backend configuration, which can contain storage credentials
 *.tfbackend
 *.tfbackend.hcl
