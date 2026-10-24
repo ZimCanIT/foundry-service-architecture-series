@@ -22,7 +22,8 @@ managed_by          = "Terraform"
 # planned hours, plus the small fixed resources. The recipient stays in terraform.tfvars only.
 budget = {
   amount                = 0 # REPLACE with the approved monthly amount
-  start_date            = "2026-11-01T00:00:00Z"
+  # Use the first day of the current month, so that the rehearsal is covered by the budget.
+  start_date            = "2026-10-01T00:00:00Z"
   alert_email_addresses = ["REPLACE_WITH_ALERT_EMAIL@example.com"]
 }
 
@@ -39,7 +40,7 @@ adapters = {}
 
 # Phase 2, after the adapter shows as Registered in the Foundry project:
 # adapters = {
-#   norrvik-triage = {
+#   fnol-triage = {
 #     model_name    = "REPLACE_WITH_REGISTERED_NAME"
 #     model_version = "1"
 #     ptu_capacity  = 0 # REPLACE with the portal value

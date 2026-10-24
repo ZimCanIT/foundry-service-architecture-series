@@ -13,6 +13,8 @@ LoRA adapter import to Fireworks on Foundry is a preview feature, offered under 
 - Global Provisioned quota for Fireworks in the region. If the portal reports none, request it at https://aka.ms/fireworks-quota. Reading quota needs Cognitive Services Usages Reader at subscription scope, assigned outside this root. [Learn]
 - The person who applies can create role assignments, for example Role Based Access Control Administrator on the resource group or above. Terraform gives that user Foundry Owner on the account. [Repo]
 - A Fireworks account with a payment method and a monthly spend cap. [Research]
+- The Azure Developer CLI with the `azure.ai.models` extension, which uploads and registers the adapter. It is not part of the base azd install: run `azd extension install azure.ai.models` and check it with `azd extension list`. `preflight.sh --stage register` fails until it is installed. [Research]
+- AzCopy v10 and `firectl`, installed as in the table below.
 - Three separate sign-ins: `az login` (Terraform and the Python scripts), `azd auth login` (registration) and `firectl signin` (training). [Research]
 
 ### Tools and where to install them
@@ -43,7 +45,7 @@ The project must exist before an adapter can be registered in it, and the deploy
 
 ## Configure and plan
 
-From `environments/foundry-fireworks-byow-lora`, copy the [example variables](terraform.tfvars.example) to `terraform.tfvars`, which is git-ignored. Replace the IDs, tags, budget amount and alert address.
+From `environments/foundry-fireworks-byow-lora`, copy the [example variables](terraform.tfvars.example) to `terraform.tfvars`, which is git-ignored. Replace the IDs, tags, budget amount and alert address. Set the budget `start_date` to the first day of the current month, so that the rehearsal is covered by the budget.
 
 ```bash
 cp terraform.tfvars.example terraform.tfvars
@@ -106,4 +108,5 @@ Deployments are destroyed before the account, and the provider purges the soft-d
 | `azd ai models create` returns 403 | A missing role on the account; whether Foundry Owner covers the upload is [To measure]. |
 | `azd ai models create` returns 409 | That name and version are already registered; raise `--version`. |
 | The deployment fails for quota | Request Global Provisioned quota at https://aka.ms/fireworks-quota. |
+| The deployment is rejected and the error names `raiPolicyName` or `versionUpgradeOption` | The deployment body sends `raiPolicyName = Microsoft.DefaultV2` and `versionUpgradeOption = NoAutoUpgrade`, which Learn's custom-model example omits. If the service rejects either, remove it from `deployments.tf` with a comment naming the error. [To measure] |
 | A `/subscriptions/...` argument arrives as a Windows path | Git Bash path conversion; the scripts export `MSYS_NO_PATHCONV=1`. |
