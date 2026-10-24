@@ -17,6 +17,15 @@ pre-commit run --all-files
 
 The commit hook runs file hygiene checks and, when Terraform files are added, Terraform formatting, validation and TFLint. Formatting may update Terraform files; review and stage those changes before committing. Terraform validation and linting do not require Azure credentials. Authenticate to Azure separately for Terraform deployment operations.
 
+Every file Git detects as text uses LF line endings, in the repository and in your working copy. `.gitattributes` sets `eol=lf`, which overrides `core.autocrlf` and `core.eol`, so clones on Windows get LF as well. This keeps shell scripts runnable in bash and Azure Cloud Shell, and leaves the `mixed-line-ending` hook nothing to rewrite.
+
+A clone made before this rule may still hold CRLF copies, shown as `w/crlf` by `git ls-files --eol`. A plain `git checkout` leaves them as they are. Commit or stash your work first, because the second command discards uncommitted changes, then run from the repository root:
+
+```bash
+git rm --cached -r -q .
+git reset --hard
+```
+
 ## Continuous integration
 
 The `Checks` workflow (`.github/workflows/checks.yml`) runs on pull requests into `main`, on pushes to `main`, every Monday at 06:23 UTC and on demand. No job needs Azure access. On Mondays only the `secrets` job and the module tests run. Tool versions are pinned in the workflow.

@@ -1,2 +1,5 @@
-* text=auto
+# Every file Git detects as text is stored and checked out with LF, whatever
+# core.autocrlf or core.eol says, so Windows and Linux working copies match.
+* text=auto eol=lf
+# Shell scripts are always text, even if detection fails, because bash rejects CRLF.
 *.sh text eol=lf
