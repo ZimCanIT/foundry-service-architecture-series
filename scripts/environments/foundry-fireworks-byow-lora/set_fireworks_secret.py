@@ -39,30 +39,48 @@ RETRY_WINDOW_SECONDS = 300
 RETRY_INTERVAL_SECONDS = 15
 
 
-def terraform_output(root: Path, name: str) -> str:
+def terraform_output(root: Path, name: str, as_json: bool = False):
+    """Read one output. -raw suits strings, numbers and bools; maps and null need -json."""
     binary = os.environ.get("TF", "terraform")
-    result = subprocess.run(
-        [binary, f"-chdir={root}", "output", "-raw", name],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return result.stdout.strip()
+    try:
+        result = subprocess.run(
+            [binary, f"-chdir={root}", "output", "-json" if as_json else "-raw", name],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        raise SystemExit(json.dumps({
+            "error": f"could not run {binary}",
+            "fix": "install Terraform or set TF (or --tf) to the Terraform binary",
+        }))
+    except subprocess.CalledProcessError as error:
+        detail = (error.stderr or "").strip().splitlines()
+        raise SystemExit(json.dumps({
+            "error": f"could not read the {name} output from the root",
+            "detail": (detail[0] if detail else f"exit code {error.returncode}")[:300],
+            "fix": "run terraform init and apply the earlier phase in the root, check --root, "
+                   "or pass the value on the command line",
+        }))
+    text = result.stdout.strip()
+    if not as_json:
+        return text
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        raise SystemExit(json.dumps({
+            "error": f"the {name} output is not valid JSON",
+            "fix": "check the Terraform binary (TF or --tf) and rerun terraform output -json " + name,
+        }))
 
 
 def resolve_vault_name(root: Path, explicit: str | None) -> str:
     if explicit:
         return explicit
-    try:
-        value = terraform_output(root, "key_vault_name")
-    except (subprocess.CalledProcessError, FileNotFoundError) as error:
-        raise SystemExit(
-            json.dumps({"error": "could not read key_vault_name from the root", "detail": str(error)[:300],
-                        "fix": "run terraform init and apply phase 1 in the root, or pass --vault-name"})
-        )
+    value = terraform_output(root, "key_vault_name", as_json=True)
     if not value:
         raise SystemExit(json.dumps({
-            "error": "the root has no Key Vault",
+            "error": "the root has no Key Vault: the key_vault_name output is null, so the vault is off",
             "fix": "set key_vault.enabled = true in the root's tfvars and apply, or pass --vault-name",
         }))
     return value

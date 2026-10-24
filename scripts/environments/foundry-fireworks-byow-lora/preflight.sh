@@ -247,12 +247,16 @@ else
 fi
 
 fc_path="$(command -v "${fc_words[0]}" 2>/dev/null || true)"
-if [[ -n "$fc_path" && -f "$fc_path" ]]; then
+fc_full_hash=""
+if [[ "${fc_words[0]}" == wsl || "${fc_words[0]}" == wsl.exe ]]; then
+  # The command is wsl.exe, so hashing it would hash the wrong file. The binary lives inside WSL.
+  add_item "firectl binary SHA-256" train no "-" warn     "Hash inside WSL: run sha256sum on the firectl binary there and record the result."
+elif [[ -n "$fc_path" && -f "$fc_path" ]]; then
   fc_hash="$(sha256_file "$(native "$fc_path")")"
   add_item "firectl binary SHA-256" train yes "${fc_hash:0:12}..." ok "Full hash printed below the table."
   fc_full_hash="$fc_hash"
   if [[ "$on_windows" == true ]]; then
-    win_path="$(cygpath -w "$fc_path")"
+    win_path="$(native "$fc_path")"
     quoted="${win_path//\'/\'\'}"
     probe powershell.exe -NoProfile -NonInteractive -Command "(Get-AuthenticodeSignature -LiteralPath '${quoted}').Status"
     if [[ $PROBE_RC -eq 0 && "$PROBE_OUT" == Valid ]]; then
@@ -263,8 +267,7 @@ if [[ -n "$fc_path" && -f "$fc_path" ]]; then
     fi
   fi
 else
-  fc_full_hash=""
-  add_item "firectl binary SHA-256" train no "-" FAIL "firectl is not a file on PATH; the WSL route has no local binary to hash."
+  add_item "firectl binary SHA-256" train no "-" FAIL "firectl is not a file on PATH."
 fi
 
 # Terraform and Docker (TFLint runs from the pinned container).
@@ -283,17 +286,56 @@ else
 fi
 
 # Terraform outputs the scripts read. Values are checked for presence only, never printed.
+# String outputs are read with -raw. The map byow_deployment_names and key_vault_name (null when
+# the Key Vault is off) are read with -json, because -raw fails for maps and for null.
 outputs_found=0
+outputs_expected=${#output_names[@]}
+outputs_problems=()
+vault_off=false
 for name in "${output_names[@]}"; do
-  if probe "$tf" -chdir="$root" output -raw "$name" && [[ -n "$PROBE_OUT" ]]; then
-    outputs_found=$((outputs_found + 1))
+  case "$name" in
+    byow_deployment_names | key_vault_name) read_mode="-json" ;;
+    *) read_mode="-raw" ;;
+  esac
+  probe "$tf" -chdir="$root" output "$read_mode" "$name"
+  if [[ $PROBE_RC -ne 0 ]]; then
+    outputs_problems+=("${name} could not be read (first line of the error: $(head -n 1 "$probe_err" | tr -d '
+'))")
+    continue
   fi
+  value="$(printf '%s' "$PROBE_OUT" | tr -d '[:space:]')"
+  case "$name" in
+    key_vault_name)
+      if [[ -z "$value" || "$value" == null ]]; then
+        vault_off=true
+        outputs_expected=$((outputs_expected - 1))
+      else
+        outputs_found=$((outputs_found + 1))
+      fi
+      ;;
+    byow_deployment_names)
+      if [[ -z "$value" || "$value" == null || "$value" == "{}" ]]; then
+        outputs_problems+=("byow_deployment_names is empty: apply phase 2 (one adapter entry) first")
+      else
+        outputs_found=$((outputs_found + 1))
+      fi
+      ;;
+    *)
+      if [[ -n "$value" ]]; then
+        outputs_found=$((outputs_found + 1))
+      else
+        outputs_problems+=("${name} is empty")
+      fi
+      ;;
+  esac
 done
-if [[ $outputs_found -eq ${#output_names[@]} ]]; then
-  add_item "Terraform outputs (root)" deploy yes "${outputs_found} of ${#output_names[@]}" ok ""
+outputs_note=""
+[[ "$vault_off" == true ]] && outputs_note=" (Key Vault off)"
+if [[ $outputs_found -eq $outputs_expected && ${#outputs_problems[@]} -eq 0 ]]; then
+  add_item "Terraform outputs (root)" deploy yes "${outputs_found} of ${outputs_expected}${outputs_note}" ok ""
 else
-  add_item "Terraform outputs (root)" deploy no "${outputs_found} of ${#output_names[@]}" FAIL \
-    "Apply the root in your own session, then rerun. The root must have state for these outputs."
+  problems_text="${outputs_problems[*]:-}"
+  add_item "Terraform outputs (root)" deploy no "${outputs_found} of ${outputs_expected}${outputs_note}" FAIL     "Apply the root in your own session, then rerun. ${problems_text}"
 fi
 
 # Table.

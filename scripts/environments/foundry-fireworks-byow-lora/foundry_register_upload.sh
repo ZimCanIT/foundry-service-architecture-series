@@ -15,11 +15,14 @@ default_root="$(cd "${script_dir}/../../.." && pwd)/environments/foundry-firewor
 readonly default_root
 
 root="$default_root"
-name="norrvik-triage"
+name="fnol-triage"
 version="1"
 base_model=""
 source_dir=""
 azcopy_path=""
+lora_rank=""
+lora_alpha=""
+lora_from_config=false
 out="./.byow-work"
 execute=false
 
@@ -33,7 +36,7 @@ Usage:
 
   --root         Terraform root. Reads foundry_project_endpoint, foundry_account_name and
                  foundry_project_name. Defaults to this environment's root.
-  --name         Custom model name. Defaults to norrvik-triage.
+  --name         Custom model name. Defaults to fnol-triage.
   --version      Custom model version. Defaults to 1. A 409 means the name and version exist;
                  bump the version.
   --base-model   Base model string, copied from the portal's Generate upload command. No default:
@@ -42,6 +45,12 @@ Usage:
   --source       Adapter folder: adapter_config.json and adapter_model.safetensors (or .bin), and
                  nothing else. Required.
   --azcopy-path  AzCopy binary. Required, so the extension does not download AzCopy itself.
+  --lora-rank    Send --lora-rank N to azd ai models create. Optional.
+  --lora-alpha   Send --lora-alpha N to azd ai models create. Optional.
+  --lora-from-config
+                 Send rank and alpha read from adapter_config.json (r and lora_alpha) for any of the
+                 two not given above. Without it, and without --lora-rank or --lora-alpha, no
+                 --lora-* flag is sent. The values in the adapter_config.json are always printed.
   --out          Working folder holding adapter.sha256 from fireworks_finetune.sh. Defaults to
                  ./.byow-work.
   --execute      Upload and register. Without it the command is printed and not run.
@@ -52,9 +61,12 @@ Authentication uses the azd session (azd auth login), not az login.
 
 Command run with --execute, in the order shown:
   azd ai models create --project-endpoint ENDPOINT --name NAME --version VERSION --base-model BASE
-      --weight-type LoRA --source DIR --azcopy-path PATH --no-prompt
+      --weight-type LoRA --source DIR --azcopy-path PATH --no-prompt [--lora-rank N] [--lora-alpha N]
   azd ai models show --name NAME --version VERSION -o json
-No --lora-* flags are sent: the service derives rank, alpha and target modules from adapter_config.json.
+By default no --lora-* flags are sent, and the service is expected to derive rank, alpha and target
+modules from adapter_config.json [To measure]. The portal's generated command carries rank and alpha
+for LoRA, so match the command the portal generates for your model: if it has --lora-rank and
+--lora-alpha, pass the same values here or use --lora-from-config.
 EOF
 }
 
@@ -66,6 +78,9 @@ while [[ $# -gt 0 ]]; do
     --base-model) base_model="$2"; shift 2 ;;
     --source) source_dir="$2"; shift 2 ;;
     --azcopy-path) azcopy_path="$2"; shift 2 ;;
+    --lora-rank) lora_rank="$2"; shift 2 ;;
+    --lora-alpha) lora_alpha="$2"; shift 2 ;;
+    --lora-from-config) lora_from_config=true; shift ;;
     --out) out="$2"; shift 2 ;;
     --execute) execute=true; shift ;;
     -h | --help) usage; exit 0 ;;
@@ -85,6 +100,12 @@ if [[ -z "$azcopy_path" ]]; then
   echo "--azcopy-path is required." >&2
   exit 2
 fi
+for pair in "--lora-rank:${lora_rank}" "--lora-alpha:${lora_alpha}"; do
+  if [[ -n "${pair#*:}" && ! "${pair#*:}" =~ ^[0-9]+$ ]]; then
+    echo "${pair%%:*} must be a whole number." >&2
+    exit 2
+  fi
+done
 if [[ -z "$name" || -z "$version" ]]; then
   echo "--name and --version must not be empty." >&2
   exit 2
@@ -234,8 +255,41 @@ echo "azd sign-in: valid."
   exit 1
 }
 
+# Rank and alpha as recorded in the adapter's own config, printed so they can be compared with the
+# portal's generated command. They are sent only when asked for.
+config_py='import json, os, sys
+with open(os.path.join(sys.argv[1], "adapter_config.json"), encoding="utf-8") as handle:
+    config = json.load(handle)
+def whole(value):
+    return str(int(value)) if isinstance(value, (int, float)) and float(value).is_integer() else ""
+print(whole(config.get("r")), whole(config.get("lora_alpha")))'
+config_rank=""
+config_alpha=""
+if read_config="$("$py" -I -c "$config_py" "$(native "$source_dir")" 2>/dev/null)"; then
+  read -r config_rank config_alpha <<< "$(printf '%s' "$read_config" | tr -d '
+')"
+fi
+echo "adapter_config.json: r = ${config_rank:-not readable}, lora_alpha = ${config_alpha:-not readable}."
+if [[ "$lora_from_config" == true ]]; then
+  [[ -z "$lora_rank" ]] && lora_rank="$config_rank"
+  [[ -z "$lora_alpha" ]] && lora_alpha="$config_alpha"
+  if [[ -z "$lora_rank" || -z "$lora_alpha" ]]; then
+    echo "--lora-from-config needs whole-number r and lora_alpha in adapter_config.json; pass --lora-rank and --lora-alpha instead." >&2
+    exit 1
+  fi
+fi
+
 endpoint_args=(--project-endpoint "$endpoint" --name "$name" --version "$version" --base-model "$base_model"
   --weight-type LoRA --source "$(native "$source_dir")" --azcopy-path "$(native "$azcopy_path")" --no-prompt)
+if [[ -n "$lora_rank" ]]; then
+  endpoint_args+=(--lora-rank "$lora_rank")
+fi
+if [[ -n "$lora_alpha" ]]; then
+  endpoint_args+=(--lora-alpha "$lora_alpha")
+fi
+if [[ -z "$lora_rank" && -z "$lora_alpha" ]]; then
+  echo "No --lora-* flag is sent. Whether the service derives rank and alpha from adapter_config.json is [To measure]; compare with the portal's generated command."
+fi
 show_args=(--name "$name" --version "$version" -o json)
 
 echo

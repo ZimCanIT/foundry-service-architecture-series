@@ -12,15 +12,15 @@ Two routes are exercised by default, both on the Foundry-managed /openai/v1 endp
 Other routes, including the Fireworks passthrough, are not called. The keyless claim covers only the
 routes this script calls. Pass --skip-responses if the Responses route is not available on the deployment.
 
-The request is a held-out fault report from the dataset folder (--index N, default 0), with the system
-and user messages only. The reply should be one JSON object with the keys category, urgency,
-asset_class and next_action. The script parses it and checks each value against the vocabularies in
-manifest.json. When the record has a reference answer, it also prints whether each field matches. One
+The request is a held-out FNOL report from the dataset folder (--index N, default 0), with the system
+and user messages only. The reply should be one JSON object with one key per label field. The script parses it and checks each
+value against the vocabularies in manifest.json. When the record has a reference answer, it also prints whether each field matches. One
 call is a demonstration, not an evaluation; the evaluation is a separate step.
 
 Deployments can take minutes to accept calls after creation, and role assignments take minutes to apply.
 --wait-ready MINUTES retries 401, 403, 404, 429 and 503 with backoff, printing each status, until the
-time limit. Without it the first error stops the script.
+time limit. Without it the first error stops the script. A 404 on the Responses route after Chat
+Completions has succeeded is not retried: it is reported with the advice to use --skip-responses.
 
 Calls are billed through the provisioned deployment (hourly, not per token), so each call adds no
 per-token charge. Logs reach Log Analytics 3 to 10 minutes after a call; record the printed UTC time.
@@ -54,15 +54,39 @@ MAX_BACKOFF_SECONDS = 60
 MAX_TOKENS = 300
 
 
-def terraform_output(root: Path, name: str) -> str:
+def terraform_output(root: Path, name: str, as_json: bool = False):
+    """Read one output. -raw suits strings, numbers and bools; maps and null need -json."""
     binary = os.environ.get("TF", "terraform")
-    result = subprocess.run(
-        [binary, f"-chdir={root}", "output", "-raw", name],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return result.stdout.strip()
+    try:
+        result = subprocess.run(
+            [binary, f"-chdir={root}", "output", "-json" if as_json else "-raw", name],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        raise SystemExit(json.dumps({
+            "error": f"could not run {binary}",
+            "fix": "install Terraform or set TF (or --tf) to the Terraform binary",
+        }))
+    except subprocess.CalledProcessError as error:
+        detail = (error.stderr or "").strip().splitlines()
+        raise SystemExit(json.dumps({
+            "error": f"could not read the {name} output from the root",
+            "detail": (detail[0] if detail else f"exit code {error.returncode}")[:300],
+            "fix": "run terraform init and apply the earlier phase in the root, check --root, "
+                   "or pass the value on the command line",
+        }))
+    text = result.stdout.strip()
+    if not as_json:
+        return text
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        raise SystemExit(json.dumps({
+            "error": f"the {name} output is not valid JSON",
+            "fix": "check the Terraform binary (TF or --tf) and rerun terraform output -json " + name,
+        }))
 
 
 def resolve_account(root: Path, explicit: str | None) -> str:
@@ -72,8 +96,8 @@ def resolve_account(root: Path, explicit: str | None) -> str:
 def resolve_deployment(root: Path, deployment: str | None, adapter: str | None) -> str:
     if deployment:
         return deployment
-    names = json.loads(terraform_output(root, "byow_deployment_names") or "{}")
-    if not names:
+    names = terraform_output(root, "byow_deployment_names", as_json=True)
+    if not isinstance(names, dict) or not names:
         raise SystemExit(json.dumps({
             "error": "no BYOW deployment in the root outputs",
             "fix": "apply phase 2 (one adapter entry) first, or pass --deployment",
@@ -133,7 +157,8 @@ def check_labels(text: str, vocabularies: dict[str, list[str]] | None, expected:
     if not isinstance(parsed, dict):
         return {"parsed_as_json": False, "passed": False}
     fields = {}
-    for field in ("category", "urgency", "asset_class", "next_action"):
+    field_names = list(vocabularies) if vocabularies is not None else list(expected)
+    for field in field_names:
         value = parsed.get(field)
         entry = {"value": value}
         if vocabularies is not None:
@@ -148,7 +173,8 @@ def check_labels(text: str, vocabularies: dict[str, list[str]] | None, expected:
             "vocabulary_checked": vocabularies is not None, "reference_checked": expected is not None}
 
 
-def with_retry(call, wait_ready_minutes: float, route: str) -> tuple[object, int]:
+def with_retry(call, wait_ready_minutes: float, route: str,
+               retry_statuses: set[int] = RETRY_STATUSES) -> tuple[object, int]:
     deadline = time.monotonic() + wait_ready_minutes * 60
     backoff = 5
     attempt = 0
@@ -158,7 +184,7 @@ def with_retry(call, wait_ready_minutes: float, route: str) -> tuple[object, int
             return call(), attempt
         except openai.APIStatusError as error:
             status = error.status_code
-            if status not in RETRY_STATUSES or time.monotonic() + backoff > deadline:
+            if status not in retry_statuses or time.monotonic() + backoff > deadline:
                 raise
             print(json.dumps({"route": route, "status": "retrying", "attempt": attempt, "http_status": status,
                               "wait_seconds": backoff}), flush=True)
@@ -209,7 +235,9 @@ def call_responses(client: OpenAI, deployment: str, messages: list[dict], wait_m
         return client.responses.with_raw_response.create(
             model=deployment, input=messages, store=False, max_output_tokens=MAX_TOKENS)
 
-    raw, attempts = with_retry(send, wait_minutes, route)
+    # A 404 here, after Chat Completions succeeded, means the route is missing on this deployment, not
+    # that the deployment is still starting, so it is not retried.
+    raw, attempts = with_retry(send, wait_minutes, route, RETRY_STATUSES - {404})
     response = raw.parse()
     text = response.output_text or ""
     check = check_labels(text, vocabularies, expected)
@@ -255,11 +283,19 @@ def main(argv: list[str]) -> int:
         "caller": caller_identity(credential),
     }, indent=2))
 
+    chat_done = False
     try:
         ok = call_chat_completions(client, deployment, messages, args.wait_ready, vocabularies, expected)
+        chat_done = True
         if not args.skip_responses:
             ok = call_responses(client, deployment, messages, args.wait_ready, vocabularies, expected) and ok
     except openai.APIStatusError as error:
+        if chat_done and error.status_code == 404:
+            print(json.dumps({"error": "the Responses route returned 404 after Chat Completions succeeded",
+                              "http_status": 404,
+                              "fix": "the route is not available on this deployment [To measure]; "
+                                     "rerun with --skip-responses to call Chat Completions only."}, indent=2))
+            return 1
         print(json.dumps({"error": "call failed", "http_status": error.status_code,
                           "fix": "401 and 403 point to role assignments (allow minutes); 404 to the deployment name; "
                                  "429 and 503 to capacity or backoff. Use --wait-ready to retry."}, indent=2))

@@ -15,10 +15,10 @@ readonly fw_id_pattern='^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$'
 stage=""
 account_id=""
 data_dir=""
-dataset_id="norrvik-triage-train"
-eval_dataset_id="norrvik-triage-eval"
+dataset_id="fnol-triage-train"
+eval_dataset_id="fnol-triage-eval"
 base_model="accounts/fireworks/models/qwen3p5-9b"
-output_model="norrvik-triage-v1"
+output_model="fnol-triage-v1"
 lora_rank="16"
 epochs="1"
 out="./.byow-work"
@@ -48,10 +48,10 @@ Usage:
   --account-id       Fireworks account, passed to firectl as -a (required).
   --data-dir         Folder with train.jsonl and eval.jsonl. Defaults to --out/dataset.
                      heldout.jsonl is never uploaded.
-  --dataset-id       Training dataset ID. Defaults to norrvik-triage-train.
-  --eval-dataset-id  Evaluation dataset ID. Defaults to norrvik-triage-eval.
+  --dataset-id       Training dataset ID. Defaults to fnol-triage-train.
+  --eval-dataset-id  Evaluation dataset ID. Defaults to fnol-triage-eval.
   --base-model       Base model name. Defaults to accounts/fireworks/models/qwen3p5-9b.
-  --output-model     Output model ID. Defaults to norrvik-triage-v1.
+  --output-model     Output model ID. Defaults to fnol-triage-v1.
   --lora-rank        LoRA rank, always passed. Defaults to 16.
   --epochs           Training epochs. Defaults to 1.
   --out              Working folder. Defaults to ./.byow-work.
@@ -404,7 +404,7 @@ stage_verify() {
     echo "firectl version --long did not run; ${version_file} records the error." >&2
   fi
   if [[ "$is_wsl" == false ]] && fc_bin="$(command -v "${fc_words[0]}" 2>/dev/null)" && [[ -f "$fc_bin" ]]; then
-    printf 'binary SHA-256  %s\n' "$("$py" -I -c "$sha256_py" "$(cygpath -w "$fc_bin")")" >> "$version_file"
+    printf 'binary SHA-256  %s\n' "$("$py" -I -c "$sha256_py" "$(native "$fc_bin")")" >> "$version_file"
   fi
   echo "Recorded firectl version in ${version_file}."
 }
